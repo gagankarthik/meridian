@@ -40,12 +40,19 @@ export async function GET(request: Request) {
       getItem(key.wsMeta(ctx.workspaceId)),
     ]);
   } catch (err) {
-    // Surface the real cause in server logs (e.g. Amplify CloudWatch). The
-    // most common production failure is missing AWS credentials — set an IAM
-    // role or MERIDIAN_AWS_* env vars (the `AWS_` prefix is reserved on Amplify).
+    // Surface the real cause in server logs (e.g. Amplify CloudWatch) AND in
+    // the response so it's visible in the browser Network tab. The most common
+    // production failures are: missing AWS credentials (set an IAM role or
+    // MERIDIAN_AWS_* env vars — `AWS_` is reserved on Amplify), an IAM policy
+    // without dynamodb:Query/GetItem, or a wrong table name / region.
     console.error("[bootstrap] DynamoDB access failed:", err);
+    const e = err as { name?: string; message?: string };
     return Response.json(
-      { error: "Workspace data unavailable. Check server AWS credentials." },
+      {
+        error: "Workspace data unavailable.",
+        detail: `${e?.name ?? "Error"}: ${e?.message ?? String(err)}`,
+        hint: "Check the app's AWS credentials/role, IAM permissions (dynamodb:Query, GetItem), and that NEXT_PUBLIC_AWS_REGION + NEXT_PUBLIC_AWS_DYNAMODB_TABLE_NAME match where your data lives.",
+      },
       { status: 500 },
     );
   }
