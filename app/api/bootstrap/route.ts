@@ -94,17 +94,60 @@ export async function GET(request: Request) {
   }
   delete workspace.logoKey;
 
+  // ── Project-level visibility ───────────────────────────────────────────
+  // Owners/admins see every project; everyone else sees only the projects
+  // they've been added to (granted on their member record, or listed on the
+  // project as lead/reviewer/member). Tasks/approvals/attachments are scoped
+  // to the visible projects so hidden work never reaches the client.
+  const isAdmin = ["owner", "admin"].includes(ctx.role.toLowerCase());
+  let visibleProjects = projects;
+  let visibleTasks = tasks;
+  let visibleApprovals = approvals;
+  let visibleAttachments = attachments;
+
+  if (!isAdmin) {
+    const myMember = members.find(
+      (m) => m.userId === ctx.userId || m.id === ctx.userId,
+    );
+    const granted = new Set(
+      Array.isArray(myMember?.projects)
+        ? (myMember!.projects as unknown[]).map(String)
+        : [],
+    );
+    const myIds = [ctx.userId, myMember?.id]
+      .filter(Boolean)
+      .map((x) => String(x));
+    const onProject = (arr: unknown) =>
+      Array.isArray(arr) && arr.some((x) => myIds.includes(String(x)));
+
+    visibleProjects = projects.filter(
+      (p) =>
+        granted.has(String(p.id)) ||
+        onProject(p.leadIds) ||
+        onProject(p.reviewerIds) ||
+        onProject(p.memberIds),
+    );
+    const visibleIds = new Set(visibleProjects.map((p) => String(p.id)));
+    visibleTasks = tasks.filter((t) => visibleIds.has(String(t.projectId)));
+    visibleApprovals = approvals.filter((a) =>
+      visibleIds.has(String(a.projectId)),
+    );
+    visibleAttachments = attachments.filter((a) =>
+      visibleIds.has(String(a.projectId)),
+    );
+  }
+
   return Response.json({
     workspace,
     me: { id: ctx.userId, email: user.email, name: user.name, role: ctx.role },
     role: ctx.role,
     members,
-    projects,
-    tasks,
+    projects: visibleProjects,
+    tasks: visibleTasks,
     columns: columns.sort((a, b) => Number(a.order ?? 0) - Number(b.order ?? 0)),
     activity: activity.sort(byCreatedDesc),
     notifications: notifications.sort(byCreatedDesc),
-    approvals: approvals.sort(byCreatedDesc),
-    attachments: attachments.sort(byCreatedDesc),
+    approvals: visibleApprovals.sort(byCreatedDesc),
+    attachments: visibleAttachments.sort(byCreatedDesc),
   });
 }

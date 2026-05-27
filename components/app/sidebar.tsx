@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname, useSearchParams } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   BarChart3,
   ChevronRight,
@@ -58,7 +58,13 @@ export function AppSidebar({
   const ws = useWorkspace();
   const [createOpen, setCreateOpen] = useState(false);
   const [showProjects, setShowProjects] = useState(true);
-  const activeProject = params.get("project") ?? CURRENT_PROJECT_ID;
+  // Defer search-param-derived state until after mount so the server render
+  // and first client render match (avoids a hydration mismatch on the links).
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => setMounted(true), []);
+  const activeProject = mounted
+    ? (params.get("project") ?? CURRENT_PROJECT_ID)
+    : null;
   const onProjectView = VIEW_PATHS.some((p) => pathname.startsWith(p));
   const defaultView = useDefaultProjectView();
 

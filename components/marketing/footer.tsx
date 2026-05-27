@@ -26,7 +26,7 @@ const COLUMNS: { title: string; links: FooterLink[] }[] = [
   {
     title: "Company",
     links: [
-      { label: "About", href: "/#metrics" },
+      { label: "About", href: "/#workflow" },
       { label: "Customers", href: "/#testimonials" },
       { label: "Contact", href: "mailto:support@meridian.work" },
       { label: "Sign in", href: "/login" },
@@ -39,7 +39,7 @@ const COLUMNS: { title: string; links: FooterLink[] }[] = [
       { label: "Security", href: "/#security" },
       { label: "Pricing", href: "/pricing" },
       { label: "Help", href: "/app/help" },
-      { label: "Status", href: "/#metrics" },
+      { label: "Status", href: "/#security" },
     ],
   },
 ];

@@ -72,9 +72,13 @@ export default function SignupPage() {
         router.push("/onboarding");
       }
     } catch (err) {
-      setError(
-        authErrorMessage(err, "Couldn't create your account. Please try again."),
-      );
+      if ((err as { name?: string })?.name === "UsernameExistsException") {
+        setError("An account with this email already exists — sign in instead.");
+      } else {
+        setError(
+          authErrorMessage(err, "Couldn't create your account. Please try again."),
+        );
+      }
       setSubmitting(false);
     }
   }

@@ -1,7 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { motion } from "motion/react";
+import { useRef } from "react";
+import { motion, useReducedMotion, useScroll, useTransform } from "motion/react";
 import { ArrowRight, Check, GanttChartSquare, Star } from "lucide-react";
 import { Avatar } from "@/components/app/widgets";
 
@@ -102,12 +103,29 @@ function FloatChip({
 }
 
 export function Hero() {
+  const sectionRef = useRef<HTMLElement>(null);
+  const reduce = useReducedMotion();
+  const { scrollYProgress } = useScroll({
+    target: sectionRef,
+    offset: ["start start", "end start"],
+  });
+  // Subtle parallax: the backdrop drifts slower than the content as you scroll.
+  const bgY = useTransform(scrollYProgress, [0, 1], [0, reduce ? 0 : 90]);
+
   return (
-    <section className="relative overflow-hidden pt-32 pb-24 sm:pt-44 sm:pb-32">
+    <section
+      ref={sectionRef}
+      className="relative overflow-hidden pt-32 pb-24 sm:pt-44 sm:pb-32"
+    >
       {/* ── background: brand aurora + connected-work network ──
           Heavy blurs are costly on mobile GPUs, so we run one modest blob on
-          phones and add the rest only from `sm` up. */}
-      <div className="pointer-events-none absolute inset-0 -z-10" aria-hidden>
+          phones and add the rest only from `sm` up. Extended insets keep the
+          parallax drift from exposing the page edge. */}
+      <motion.div
+        style={{ y: bgY }}
+        className="pointer-events-none absolute -inset-y-24 inset-x-0 -z-10"
+        aria-hidden
+      >
         <div className="brand-wash absolute inset-0" />
         <div className="absolute left-1/2 top-[-7rem] size-[30rem] -translate-x-1/2 rounded-full bg-signal/12 blur-[80px] sm:size-[48rem] sm:blur-[120px]" />
         <div className="absolute right-[0%] top-[8%] hidden size-96 rounded-full bg-[#22a06b]/14 blur-[120px] sm:block" />
@@ -116,7 +134,7 @@ export function Hero() {
         <div className="absolute inset-0 hidden opacity-70 [mask-image:radial-gradient(ellipse_75%_65%_at_50%_38%,black,transparent_80%)] sm:block">
           <NetworkBackdrop />
         </div>
-      </div>
+      </motion.div>
 
       {/* floating product fragments */}
       <FloatChip className="left-[6%] top-[34%] xl:left-[11%]" delay={0.6} drift={12}>

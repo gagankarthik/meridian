@@ -3,7 +3,6 @@
 import Link from "next/link";
 import { Check } from "lucide-react";
 import { Wordmark } from "@/components/brand/logo";
-import { BoardIllustration } from "@/components/marketing/illustrations";
 import { cn } from "@/lib/utils";
 
 type AuthShellProps = {
@@ -85,14 +84,15 @@ export function AuthShell({ children, title, subtitle, wide }: AuthShellProps) {
       {/* ---- Right: brand panel (desktop only) ---- */}
       <aside className="brand-gradient relative hidden overflow-hidden lg:block">
         {/* atmospheric glows */}
-        <div className="pointer-events-none absolute -top-24 -right-16 size-96 rounded-full bg-white/15 blur-3xl" />
-        <div className="pointer-events-none absolute bottom-[-6rem] left-[-4rem] size-80 rounded-full bg-white/10 blur-3xl" />
+        <div className="pointer-events-none absolute -top-28 -right-20 size-96 rounded-full bg-white/15 blur-3xl" />
+        <div className="pointer-events-none absolute bottom-[-7rem] left-[-5rem] size-80 rounded-full bg-white/10 blur-3xl" />
 
         <div className="relative flex h-full flex-col justify-between p-12 xl:p-16">
           <Wordmark className="text-white" />
 
+          {/* centerpiece: headline + concise value bullets */}
           <div className="max-w-md">
-            <h2 className="text-balance text-[2.1rem] leading-[1.1] font-semibold tracking-tight text-white">
+            <h2 className="text-balance text-[2.25rem] leading-[1.08] font-semibold tracking-tight text-white">
               The operating system for ambitious teams.
             </h2>
             <p className="mt-4 text-[1.02rem] leading-relaxed text-white/80">
@@ -100,26 +100,37 @@ export function AuthShell({ children, title, subtitle, wide }: AuthShellProps) {
               truth your whole company can trust.
             </p>
 
-            <ul className="mt-8 space-y-3.5">
+            <ul className="mt-9 space-y-4">
               {PANEL_POINTS.map((point) => (
                 <li key={point} className="flex items-start gap-3 text-white/90">
                   <span className="mt-0.5 flex size-5 shrink-0 items-center justify-center rounded-full bg-white/20 ring-1 ring-white/30">
                     <Check className="size-3" strokeWidth={3} />
                   </span>
-                  <span className="text-[0.95rem] leading-snug">{point}</span>
+                  <span className="text-[0.97rem] leading-snug">{point}</span>
                 </li>
               ))}
             </ul>
           </div>
 
-          <div className="relative">
-            <div className="overflow-hidden rounded-2xl bg-white/10 p-3 shadow-float ring-1 ring-white/20 backdrop-blur-sm">
-              <BoardIllustration className="w-full" />
-            </div>
-            <p className="mt-5 text-sm text-white/70">
-              Trusted by product, design, and engineering teams worldwide.
-            </p>
-          </div>
+          {/* compact, proportioned testimonial card (replaces the oversized art) */}
+          <figure className="max-w-md rounded-2xl border border-white/15 bg-white/10 p-5 shadow-float backdrop-blur-sm">
+            <blockquote className="text-[15px] leading-relaxed text-white/90">
+              &ldquo;We retired four tools and a quarter of our status meetings —
+              leadership finally trusts one place for the real state of
+              work.&rdquo;
+            </blockquote>
+            <figcaption className="mt-4 flex items-center gap-2.5">
+              <span className="grid size-9 shrink-0 place-items-center rounded-full bg-white/20 text-[12px] font-bold text-white ring-1 ring-white/30">
+                DW
+              </span>
+              <span className="text-[12.5px] leading-tight text-white/80">
+                <span className="block font-semibold text-white">
+                  Dana Whitfield
+                </span>
+                VP, Program Management
+              </span>
+            </figcaption>
+          </figure>
         </div>
       </aside>
     </main>

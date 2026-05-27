@@ -39,7 +39,7 @@ const MENUS: { label: string; href?: string; cols?: 1 | 2; items?: MenuItem[] }[
       { icon: PieChart, label: "Dashboards", desc: "Real-time reporting", href: "/#views" },
       { icon: Workflow, label: "Workflow", desc: "Intake to outcome", href: "/#workflow" },
       { icon: Blocks, label: "Capabilities", desc: "Everything the work needs", href: "/#platform" },
-      { icon: Sparkles, label: "Roadmap", desc: "Plan across quarters", href: "/#metrics" },
+      { icon: Sparkles, label: "Roadmap", desc: "Plan across quarters", href: "/#workflow" },
     ],
   },
   {

@@ -8,6 +8,13 @@ import {
 } from "@/lib/ddb";
 import { getServerUser, type ServerUser } from "@/lib/server-user";
 
+function initialsOf(s: string) {
+  const parts = s.trim().split(/\s+/);
+  return ((parts[0]?.[0] ?? "") + (parts[1]?.[0] ?? parts[0]?.[1] ?? ""))
+    .toUpperCase()
+    .slice(0, 2);
+}
+
 export type WorkspaceContext = {
   user: ServerUser;
   workspaceId: string;
@@ -43,19 +50,28 @@ export async function resolveWorkspace(
     if (member?.workspaceId) {
       const workspaceId = String(member.workspaceId);
       const role = String(member.role ?? "Member");
-      // Link sub → workspace and activate the invited member.
+      // The name the invited user just set (on first sign-in) lives on the
+      // token — adopt it for the member record (and recompute initials) so it
+      // shows everywhere: team list, avatars, assignees, comments, etc.
+      const displayName = user.name?.trim() || String(member.name ?? user.email);
       await putItem({
         ...key.user(user.sub),
         type: "user",
         workspaceId,
         userId: user.sub,
         email: user.email,
-        name: user.name ?? member.name,
+        name: displayName,
         role,
       });
       await putItem(
         withEmailIndex(
-          { ...member, status: "active", userId: user.sub },
+          {
+            ...member,
+            status: "active",
+            userId: user.sub,
+            name: displayName,
+            initials: initialsOf(displayName),
+          },
           user.email,
         ),
       );

@@ -1,9 +1,9 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import Link from "next/link";
 import { motion } from "motion/react";
 import {
-  ArrowRight,
   ArrowUpRight,
   CalendarClock,
   CheckCircle2,
@@ -16,11 +16,19 @@ import {
   COLUMN_LABEL,
   memberById,
   projectById,
+  projectMemberIds,
   taskKey,
 } from "@/lib/app-data";
 import type { Project, Task } from "@/lib/app-data";
-import { Avatar, AvatarStack, ProjectAvatar } from "@/components/app/widgets";
+import {
+  Avatar,
+  AvatarStack,
+  ProgressBar,
+  ProjectAvatar,
+  StatusChip,
+} from "@/components/app/widgets";
 import { useWorkspace } from "@/components/app/workspace";
+import { projectHref, useDefaultProjectView } from "@/lib/preferences";
 import { cn } from "@/lib/utils";
 
 const ease = [0.16, 1, 0.3, 1] as const;
@@ -88,17 +96,6 @@ export function DashboardCharts() {
     ];
   }, [tasks, projects]);
 
-  /* Feature the project carrying the most tracked tasks (if any). */
-  const featured = useMemo<Project | undefined>(() => {
-    if (projects.length === 0) return undefined;
-    return [...projects]
-      .map((p) => ({
-        project: p,
-        count: tasks.filter((t) => t.projectId === p.id).length,
-      }))
-      .sort((a, b) => b.count - a.count)[0].project;
-  }, [projects, tasks]);
-
   const recent = useMemo(
     () =>
       [...tasks]
@@ -116,10 +113,10 @@ export function DashboardCharts() {
         ))}
       </div>
 
-      {/* productivity (2/3) + project overview (1/3) */}
+      {/* productivity (2/3) + all projects (1/3) */}
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
         <ProductivityOverview hasData={tasks.length > 0} />
-        <ProjectOverview project={featured} />
+        <ProjectsPanel projects={projects} />
       </div>
 
       {/* recent tasks */}
@@ -429,33 +426,9 @@ function ProductivityOverview({ hasData }: { hasData: boolean }) {
   );
 }
 
-/* ----------------------------- project overview --------------------------- */
-function ProjectOverview({ project }: { project?: Project }) {
-  const ws = useWorkspace();
-  const timeline = useMemo(
-    () =>
-      project
-        ? ws.tasks
-            .filter((t) => t.projectId === project.id)
-            .sort((a, b) => (dueOrdinal(a.due) ?? 0) - (dueOrdinal(b.due) ?? 0))
-            .slice(0, 3)
-        : [],
-    [project, ws.tasks],
-  );
-
-  if (!project) {
-    return (
-      <section className="grid place-items-center rounded-2xl border border-line bg-card p-8 text-center shadow-card">
-        <p className="text-[13px] text-ink-soft">
-          No projects yet — create one to see its overview here.
-        </p>
-      </section>
-    );
-  }
-
-  const lead = project.leadIds[0] ? memberById(project.leadIds[0]) : undefined;
-  const memberIds = project.memberIds.slice(0, 4);
-
+/* ------------------------------ projects panel ---------------------------- */
+function ProjectsPanel({ projects }: { projects: Project[] }) {
+  const defaultView = useDefaultProjectView();
   return (
     <motion.section
       className="flex flex-col overflow-hidden rounded-2xl border border-line bg-card shadow-card"
@@ -463,102 +436,52 @@ function ProjectOverview({ project }: { project?: Project }) {
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.5, ease, delay: 0.36 }}
     >
-      {/* colored banner */}
-      <div
-        className="relative px-5 pb-5 pt-4"
-        style={{
-          background: `linear-gradient(135deg, ${tint(project.color, 16)}, ${tint(project.color, 4)})`,
-        }}
-      >
-        <div className="flex items-center justify-between">
-          <span className="inline-flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wide text-ink-soft">
-            <span className="size-2 rounded-full" style={{ background: project.color }} />
-            Project Overview
-          </span>
-          <AvatarStack ids={memberIds} size={24} max={3} />
-        </div>
-        <div className="mt-3 flex items-center gap-3">
-          <ProjectAvatar
-            seed={project.name}
-            size={44}
-            rounded="rounded-xl"
-            className="shadow-raised"
-          />
-          <div className="min-w-0">
-            <h3 className="truncate font-display text-[17px] font-extrabold tracking-tight text-ink">
-              {project.name}
-            </h3>
-            <p className="font-mono text-[11px] tracking-wide text-ink-soft">
-              {project.key} · led by {lead?.name ?? "—"}
-            </p>
-          </div>
-        </div>
-      </div>
+      <header className="flex items-center justify-between border-b border-line px-5 py-3.5">
+        <h3 className="text-[13px] font-semibold tracking-tight text-ink">
+          Projects
+        </h3>
+        <span className="tnum font-mono text-[11px] text-ink-soft">
+          {projects.length}
+        </span>
+      </header>
 
-      <div className="flex flex-1 flex-col gap-4 p-5">
-        <p className="text-[12.5px] leading-relaxed text-ink-muted">
-          {project.description?.trim()
-            ? project.description
-            : `${project.name} keeps the ${project.key.toLowerCase()} workstream moving — scope, delivery, and the milestones the team is driving this quarter.`}
+      {projects.length === 0 ? (
+        <p className="px-5 py-12 text-center text-[13px] text-ink-soft">
+          No projects yet — they&apos;ll appear here once you&apos;re added to one.
         </p>
-
-        {/* progress */}
-        <div>
-          <div className="mb-1.5 flex items-center justify-between text-[12px] font-semibold">
-            <span className="text-ink-soft">Progress</span>
-            <span className="tnum text-ink">{project.progress}%</span>
-          </div>
-          <div className="h-2 w-full overflow-hidden rounded-full bg-secondary">
-            <motion.div
-              className="h-full rounded-full"
-              style={{ background: project.color }}
-              initial={{ width: 0 }}
-              animate={{ width: `${project.progress}%` }}
-              transition={{ duration: 0.9, ease, delay: 0.5 }}
-            />
-          </div>
-        </div>
-
-        {/* work timeline */}
-        <div className="border-t border-line pt-4">
-          <p className="mb-3 text-[11px] font-bold uppercase tracking-wide text-ink-soft">
-            Work timeline
-          </p>
-          <ol className="space-y-3">
-            {timeline.map((t, i) => {
-              const meta = STATUS_META[t.column] ?? STATUS_META.todo;
-              return (
-                <li key={t.id} className="flex items-start gap-3">
-                  <span className="mt-0.5 flex flex-col items-center">
-                    <span
-                      className="size-2.5 rounded-full ring-4"
-                      style={{ background: meta.color, color: tint(meta.color, 18) }}
-                    />
-                    {i < timeline.length - 1 && (
-                      <span className="mt-0.5 h-7 w-px bg-line" />
-                    )}
-                  </span>
-                  <div className="min-w-0 flex-1">
-                    <p className="tnum text-[11px] font-semibold text-ink-soft">
-                      {t.due}
-                    </p>
-                    <button
-                      type="button"
-                      onClick={() => ws.openTask(t.id)}
-                      className="group flex w-full items-center gap-1.5 text-left"
-                    >
-                      <span className="min-w-0 flex-1 truncate text-[13px] font-semibold text-ink transition-colors group-hover:text-signal">
-                        {t.title}
-                      </span>
-                      <ArrowRight className="size-3.5 shrink-0 text-ink-soft transition-transform group-hover:translate-x-0.5 group-hover:text-signal" />
-                    </button>
+      ) : (
+        <div className="max-h-[26rem] divide-y divide-line overflow-y-auto">
+          {projects.map((p) => (
+            <Link
+              key={p.id}
+              href={projectHref(defaultView, p.id)}
+              className="block px-5 py-4 transition-colors hover:bg-paper-raised"
+            >
+              <div className="flex items-center gap-3">
+                <ProjectAvatar seed={p.name} size={34} rounded="rounded-lg" />
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-2">
+                    <span className="truncate text-[14px] font-semibold text-ink">
+                      {p.name}
+                    </span>
+                    <StatusChip status={p.status} />
                   </div>
-                </li>
-              );
-            })}
-          </ol>
+                  <p className="truncate text-[11px] text-ink-soft">
+                    {p.description?.trim() || `${p.key} · ${p.open} open`}
+                  </p>
+                </div>
+                <AvatarStack ids={projectMemberIds(p.id)} size={22} max={3} />
+              </div>
+              <div className="mt-2.5 flex items-center gap-2.5">
+                <ProgressBar value={p.progress} color={p.color} />
+                <span className="tnum w-9 shrink-0 text-right font-mono text-[11px] text-ink-soft">
+                  {p.progress}%
+                </span>
+              </div>
+            </Link>
+          ))}
         </div>
-      </div>
+      )}
     </motion.section>
   );
 }
