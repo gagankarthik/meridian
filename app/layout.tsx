@@ -16,27 +16,59 @@ const geistMono = Geist_Mono({
   display: "swap",
 });
 
+const SITE_URL = "https://meridian.work";
+const TITLE = "Meridian — The operating system for ambitious teams";
+const DESCRIPTION =
+  "Meridian is the enterprise work platform where planning, execution, and reporting live in one place. Boards, timelines, and dashboards that move at the speed of your team.";
+
 export const metadata: Metadata = {
-  metadataBase: new URL("https://meridian.work"),
+  metadataBase: new URL(SITE_URL),
   title: {
-    default: "Meridian — The operating system for ambitious teams",
+    default: TITLE,
     template: "%s · Meridian",
   },
-  description:
-    "Meridian is the enterprise work platform where planning, execution, and reporting live in one place. Boards, timelines, and dashboards that move at the speed of your team.",
+  description: DESCRIPTION,
+  applicationName: "Meridian",
+  authors: [{ name: "Meridian Labs" }],
+  creator: "Meridian Labs",
+  publisher: "Meridian Labs",
   keywords: [
-    "project management",
-    "work management",
-    "enterprise",
-    "kanban",
-    "timeline",
+    "project management software",
+    "work management platform",
+    "kanban board",
+    "project timeline",
     "team collaboration",
+    "task tracking",
+    "roadmap software",
+    "agile project management",
+    "enterprise work management",
   ],
+  alternates: { canonical: "/" },
+  category: "technology",
   openGraph: {
-    title: "Meridian — The operating system for ambitious teams",
-    description:
-      "The enterprise work platform where planning, execution, and reporting live in one place.",
     type: "website",
+    url: SITE_URL,
+    siteName: "Meridian",
+    locale: "en_US",
+    title: TITLE,
+    description: DESCRIPTION,
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: TITLE,
+    description: DESCRIPTION,
+    creator: "@meridian",
+  },
+  robots: {
+    index: true,
+    follow: true,
+    googleBot: {
+      index: true,
+      follow: true,
+      "max-image-preview": "large",
+      "max-snippet": -1,
+      "max-video-preview": -1,
+    },
   },
 };
 

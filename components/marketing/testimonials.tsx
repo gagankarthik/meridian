@@ -3,7 +3,7 @@ import { Reveal, Section } from "./primitives";
 
 export function Testimonials() {
   return (
-    <Section className="py-24 sm:py-32">
+    <Section id="testimonials" className="scroll-mt-20 py-24 sm:py-32">
       <Reveal delay={0.05}>
         <h2 className="mt-5 max-w-2xl font-display text-[clamp(2rem,4vw,3.25rem)] leading-[1.05] font-extrabold tracking-[-0.025em] text-ink text-balance">
           Teams ship more with Meridian.

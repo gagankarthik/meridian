@@ -67,7 +67,7 @@ const USE_CASES: UseCase[] = [
 
 export function UseCases() {
   return (
-    <section className="border-y border-line bg-paper-raised">
+    <section id="use-cases" className="scroll-mt-20 border-y border-line bg-paper-raised">
       <Section className="py-24 sm:py-32">
         <div className="max-w-2xl">
           <Reveal delay={0.1}>

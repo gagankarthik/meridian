@@ -18,7 +18,7 @@ export function Views() {
   const [tab, setTab] = useState<TabId>("board");
 
   return (
-    <section id="views" className="py-24 sm:py-32">
+    <section id="views" className="scroll-mt-20 py-24 sm:py-32">
       <div className="mx-auto max-w-[1240px] px-5 sm:px-8 lg:px-12">
         <div className="flex flex-col items-start justify-between gap-8 lg:flex-row lg:items-end">
           <div className="relative max-w-xl">

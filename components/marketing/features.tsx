@@ -10,7 +10,7 @@ const SPANS = ["sm:col-span-2 lg:col-span-2 lg:row-span-2", "", "", "", "", ""];
 
 export function Features() {
   return (
-    <Section id="platform" className="py-24 sm:py-32">
+    <Section id="platform" className="scroll-mt-20 py-24 sm:py-32">
       <div className="max-w-2xl">
         <Reveal delay={0.1}>
           <h2 className="font-display text-[clamp(2rem,4vw,3.25rem)] leading-[1.05] font-extrabold tracking-[-0.025em] text-ink text-balance">

@@ -35,7 +35,7 @@ function CountUp({ value, suffix }: { value: number; suffix: string }) {
 
 export function Metrics() {
   return (
-    <section className="border-y border-line bg-paper-raised">
+    <section id="metrics" className="scroll-mt-20 border-y border-line bg-paper-raised">
       <div className="mx-auto grid max-w-[1240px] grid-cols-2 gap-px bg-line lg:grid-cols-4">
         {METRICS.map((m) => (
           <div key={m.label} className="bg-paper-raised px-6 py-12 text-center sm:py-16">

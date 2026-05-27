@@ -15,7 +15,7 @@ const PHASE_ART = [PhaseIntake, PhasePlan, PhaseReport] as const;
 
 export function WorkflowSection() {
   return (
-    <section id="workflow" className="border-y border-line bg-paper-raised">
+    <section id="workflow" className="scroll-mt-20 border-y border-line bg-paper-raised">
       <Section className="py-24 sm:py-32">
         <div className="flex flex-col justify-between gap-6 md:flex-row md:items-end">
           <div className="max-w-xl">

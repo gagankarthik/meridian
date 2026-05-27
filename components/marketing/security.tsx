@@ -4,7 +4,7 @@ import { Reveal, Section } from "./primitives";
 export function Security() {
   return (
     <section className="border-y border-line bg-paper-raised">
-      <Section id="security" className="py-24 sm:py-32">
+      <Section id="security" className="scroll-mt-20 py-24 sm:py-32">
         <div className="grid grid-cols-1 gap-12 lg:grid-cols-12 lg:gap-16">
           <div className="lg:col-span-5">
             <Reveal delay={0.1}>
