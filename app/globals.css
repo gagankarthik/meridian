@@ -221,6 +221,19 @@
   }
 }
 
+/* Respect reduced-motion (accessibility + low-power devices): kill looping
+   animations and long transitions so the page stays smooth. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
 /* ---- Soft, navy-tinted elevation (Atlassian-style) -------- */
 @utility shadow-card {
   box-shadow:

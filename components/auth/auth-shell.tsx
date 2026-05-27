@@ -32,9 +32,15 @@ const PANEL_POINTS = [
  */
 export function AuthShell({ children, title, subtitle, wide }: AuthShellProps) {
   return (
-    <main className="grid min-h-dvh bg-paper lg:grid-cols-[1fr_1.05fr]">
+    <main className="relative grid min-h-dvh bg-paper lg:grid-cols-[1fr_1.05fr]">
+      {/* subtle brand wash on mobile/tablet (the brand panel is desktop-only) */}
+      <div
+        aria-hidden
+        className="brand-wash pointer-events-none absolute inset-0 opacity-70 lg:hidden"
+      />
+
       {/* ---- Left: form column ---- */}
-      <div className="flex flex-col px-5 py-8 sm:px-8 lg:px-12">
+      <div className="relative flex flex-col px-5 py-7 sm:px-8 sm:py-10 lg:px-12">
         <div className="mx-auto flex w-full max-w-md flex-1 flex-col">
           <Link
             href="/"
@@ -45,16 +51,16 @@ export function AuthShell({ children, title, subtitle, wide }: AuthShellProps) {
 
           <div
             className={cn(
-              "my-auto w-full py-10",
+              "my-auto w-full py-8 sm:py-10",
               wide && "max-w-none",
             )}
           >
-            <header className="mb-7">
-              <h1 className="text-[1.7rem] leading-tight font-semibold tracking-tight text-ink">
+            <header className="mb-6 sm:mb-7">
+              <h1 className="text-[clamp(1.5rem,6vw,1.8rem)] leading-tight font-semibold tracking-tight text-ink text-balance">
                 {title}
               </h1>
               {subtitle ? (
-                <p className="mt-2 text-[0.95rem] leading-relaxed text-ink-muted">
+                <p className="mt-2 text-[0.95rem] leading-relaxed text-ink-muted text-pretty">
                   {subtitle}
                 </p>
               ) : null}
@@ -65,11 +71,11 @@ export function AuthShell({ children, title, subtitle, wide }: AuthShellProps) {
 
           <footer className="pt-6 text-xs text-ink-soft">
             &copy; {new Date().getFullYear()} Meridian, Inc. ·{" "}
-            <Link href="/" className="transition-colors hover:text-ink-muted">
+            <Link href="/privacy" className="transition-colors hover:text-ink-muted">
               Privacy
             </Link>{" "}
             ·{" "}
-            <Link href="/" className="transition-colors hover:text-ink-muted">
+            <Link href="/terms" className="transition-colors hover:text-ink-muted">
               Terms
             </Link>
           </footer>

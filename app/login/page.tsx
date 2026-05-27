@@ -144,10 +144,10 @@ export default function LoginPage() {
 /* ---------- shared form primitives (local to auth pages) ---------- */
 
 const inputClass =
-  "w-full rounded-lg border border-line bg-paper py-2.5 pl-10 pr-3 text-sm text-ink placeholder:text-ink-soft transition-colors outline-none focus:border-signal focus:ring-2 focus:ring-signal-soft";
+  "w-full rounded-lg border border-line bg-paper py-3 pl-10 pr-3 text-base text-ink placeholder:text-ink-soft transition-colors outline-none focus:border-signal focus:ring-2 focus:ring-signal-soft sm:py-2.5 sm:text-sm";
 
 const primaryButton =
-  "flex w-full items-center justify-center gap-2 rounded-lg bg-signal px-4 py-2.5 text-sm font-semibold text-white shadow-card transition-colors hover:bg-signal-strong focus:outline-none focus:ring-2 focus:ring-signal-soft disabled:opacity-70";
+  "flex w-full items-center justify-center gap-2 rounded-lg bg-signal px-4 py-3 text-sm font-semibold text-white shadow-card transition-colors hover:bg-signal-strong focus:outline-none focus:ring-2 focus:ring-signal-soft active:translate-y-px disabled:opacity-70 sm:py-2.5";
 
 function Field({
   label,

@@ -2,110 +2,83 @@
 
 import Link from "next/link";
 import { motion } from "motion/react";
-import { ArrowRight, Check } from "lucide-react";
-import { MeridianMark } from "@/components/brand/logo";
+import { ArrowRight } from "lucide-react";
 
 const ease = [0.16, 1, 0.3, 1] as const;
 
-const reveal = {
-  hidden: { opacity: 0, y: 20 },
-  show: { opacity: 1, y: 0 },
-};
+/* What you get — real product facts, numbered like the rest of the site. */
+const INCLUDED = [
+  { n: "01", label: "Boards, tables & timelines" },
+  { n: "02", label: "Dashboards & live reporting" },
+  { n: "03", label: "Approvals, roles & access" },
+  { n: "04", label: "Free to start — no credit card" },
+];
 
-const TRUST = ["Free to start", "No credit card", "Set up in minutes"];
+const ACCENT = "#7aa2ff"; // readable blue on the ink panel
 
 export function CTA() {
   return (
     <section className="px-5 py-20 sm:px-8 sm:py-24 lg:px-12">
       <motion.div
-        initial="hidden"
-        whileInView="show"
+        initial={{ opacity: 0, y: 24 }}
+        whileInView={{ opacity: 1, y: 0 }}
         viewport={{ once: true, margin: "-12% 0px" }}
-        transition={{ staggerChildren: 0.08 }}
-        className="relative mx-auto max-w-[1240px] overflow-hidden rounded-[2rem] px-6 py-20 text-center text-white shadow-float sm:px-12 sm:py-28"
-        style={{
-          background:
-            "linear-gradient(135deg, #1e3a8a 0%, #2563eb 40%, #0e7490 100%)",
-        }}
+        transition={{ duration: 0.7, ease }}
+        className="mx-auto grid max-w-[1240px] overflow-hidden rounded-[1.75rem] bg-ink text-paper shadow-float lg:grid-cols-[1.15fr_0.85fr]"
       >
-        {/* aurora depth */}
-        <motion.div
-          animate={{ y: [0, -22, 0], opacity: [0.8, 1, 0.8] }}
-          transition={{ duration: 13, ease: "easeInOut", repeat: Infinity }}
-          className="pointer-events-none absolute -right-20 -top-28 size-[30rem] rounded-full bg-[#06b6d4]/40 blur-[120px]"
-        />
-        <motion.div
-          animate={{ y: [0, 22, 0], opacity: [0.7, 1, 0.7] }}
-          transition={{ duration: 16, ease: "easeInOut", repeat: Infinity }}
-          className="pointer-events-none absolute -bottom-28 -left-20 size-[28rem] rounded-full bg-[#7a3ff0]/35 blur-[130px]"
-        />
-        <div className="pointer-events-none absolute left-1/2 top-1/2 size-[34rem] -translate-x-1/2 -translate-y-1/2 rounded-full bg-white/10 blur-[120px]" />
-
-        {/* fine noise for texture */}
-        <div
-          aria-hidden
-          className="pointer-events-none absolute inset-0 opacity-[0.06] mix-blend-overlay"
-          style={{
-            backgroundImage:
-              "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E\")",
-          }}
-        />
-
-        {/* brand watermark */}
-        <MeridianMark className="pointer-events-none absolute -bottom-16 -left-10 size-80 text-white/[0.07]" />
-        <MeridianMark className="pointer-events-none absolute -right-12 -top-16 size-64 text-white/[0.06]" />
-
-        <div className="relative mx-auto max-w-2xl">
-          <motion.h2
-            variants={reveal}
-            transition={{ duration: 0.7, ease }}
-            className="font-display text-[clamp(2.5rem,6vw,4.75rem)] leading-[0.98] font-extrabold tracking-[-0.035em] text-balance"
+        {/* LEFT — the statement */}
+        <div className="border-b border-white/10 p-9 sm:p-12 lg:border-b-0 lg:border-r lg:p-14">
+          <p
+            className="font-mono text-[12px] font-semibold uppercase tracking-[0.22em]"
+            style={{ color: ACCENT }}
           >
+            Get started
+          </p>
+          <h2 className="mt-5 max-w-xl font-display text-[clamp(2.25rem,5vw,4rem)] leading-[1.0] font-extrabold tracking-[-0.035em] text-balance">
             Put your work on one map.
-          </motion.h2>
-
-          <motion.p
-            variants={reveal}
-            transition={{ duration: 0.7, ease }}
-            className="mx-auto mt-6 max-w-xl text-[18px] leading-relaxed text-white/85 text-pretty"
-          >
+          </h2>
+          <p className="mt-5 max-w-md text-[16.5px] leading-relaxed text-paper/70">
             Join the teams that traded tool sprawl for a single source of truth.
             Your workspace is ready in minutes.
-          </motion.p>
+          </p>
 
-          <motion.div
-            variants={reveal}
-            transition={{ duration: 0.7, ease }}
-            className="mt-10 flex flex-wrap items-center justify-center gap-3"
-          >
+          <div className="mt-9 flex flex-wrap items-center gap-x-6 gap-y-3">
             <Link
               href="/signup"
-              className="group inline-flex items-center gap-2 rounded-xl bg-white px-7 py-3.5 text-[15px] font-bold text-[#1e3a8a] shadow-raised transition-transform hover:scale-[1.02] active:scale-100"
+              className="group inline-flex items-center gap-2 rounded-xl bg-signal px-6 py-3.5 text-[15px] font-bold text-white shadow-raised transition-colors hover:bg-signal-strong active:translate-y-px"
             >
               Get started free
               <ArrowRight className="size-4 transition-transform group-hover:translate-x-0.5" />
             </Link>
             <Link
               href="mailto:sales@meridian.work"
-              className="inline-flex items-center gap-2 rounded-xl border border-white/40 px-7 py-3.5 text-[15px] font-bold text-white backdrop-blur transition-colors hover:bg-white/10"
+              className="text-[15px] font-semibold text-paper/80 underline-offset-4 transition-colors hover:text-paper hover:underline"
             >
               Talk to sales
             </Link>
-          </motion.div>
+          </div>
+        </div>
 
-          {/* trust microline */}
-          <motion.ul
-            variants={reveal}
-            transition={{ duration: 0.7, ease }}
-            className="mt-8 flex flex-wrap items-center justify-center gap-x-6 gap-y-2 text-[13px] font-medium text-white/75"
-          >
-            {TRUST.map((t) => (
-              <li key={t} className="inline-flex items-center gap-1.5">
-                <Check className="size-4 text-white" strokeWidth={2.6} />
-                {t}
+        {/* RIGHT — structured "what's included", hairline-divided */}
+        <div className="flex flex-col justify-center p-9 sm:p-12 lg:p-12">
+          <p className="mb-1 font-mono text-[11px] uppercase tracking-[0.2em] text-paper/45">
+            Everything included
+          </p>
+          <ul className="divide-y divide-white/10">
+            {INCLUDED.map((it) => (
+              <li key={it.n} className="flex items-baseline gap-4 py-4">
+                <span
+                  className="font-mono text-[12px] font-bold"
+                  style={{ color: ACCENT }}
+                >
+                  {it.n}
+                </span>
+                <span className="text-[15px] font-medium text-paper/90">
+                  {it.label}
+                </span>
               </li>
             ))}
-          </motion.ul>
+          </ul>
         </div>
       </motion.div>
     </section>

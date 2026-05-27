@@ -205,7 +205,7 @@ export default function ResetPasswordPage() {
 }
 
 const inputClass =
-  "w-full rounded-lg border border-line bg-paper py-2.5 pl-10 pr-3 text-sm text-ink placeholder:text-ink-soft transition-colors outline-none focus:border-signal focus:ring-2 focus:ring-signal-soft";
+  "w-full rounded-lg border border-line bg-paper py-3 pl-10 pr-3 text-base text-ink placeholder:text-ink-soft transition-colors outline-none focus:border-signal focus:ring-2 focus:ring-signal-soft sm:py-2.5 sm:text-sm";
 
 const errorRing =
   "border-destructive focus:border-destructive focus:ring-destructive/20";

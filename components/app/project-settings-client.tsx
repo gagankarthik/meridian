@@ -43,8 +43,11 @@ export function ProjectSettingsClient({ projectId }: { projectId: string }) {
   const [saved, setSaved] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
 
-  const canDelete = ws.can("delete");
-  const canEdit = ws.can("edit");
+  // Project configuration is a management action — admins/owners only. Members
+  // (editors) work on tasks, not on reconfiguring or deleting the project.
+  const canManage = ws.can("manage");
+  const canDelete = canManage;
+  const canEdit = canManage;
 
   function save() {
     ws.updateProject(projectId, {

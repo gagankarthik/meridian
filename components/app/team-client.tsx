@@ -51,6 +51,9 @@ function nameFromEmail(email: string) {
 
 export function TeamClient() {
   const ws = useWorkspace();
+  // Only owners/admins manage people (invite, change roles, remove). Members
+  // and viewers see the team read-only.
+  const canManage = ws.can("manage");
   const [members, setMembers] = useState<Member[]>(ws.members);
   // Keep the table in sync with live workspace members as they load.
   useEffect(() => setMembers(ws.members), [ws.members]);
@@ -264,13 +267,15 @@ export function TeamClient() {
             Team
           </h1>
         </div>
-        <button
-          onClick={() => setOpen(true)}
-          className="inline-flex items-center gap-2 rounded-xl bg-signal px-4 py-2.5 text-[13px] font-bold text-white transition-colors hover:bg-signal-strong"
-        >
-          <UserPlus className="size-4" />
-          Invite people
-        </button>
+        {canManage && (
+          <button
+            onClick={() => setOpen(true)}
+            className="inline-flex items-center gap-2 rounded-xl bg-signal px-4 py-2.5 text-[13px] font-bold text-white transition-colors hover:bg-signal-strong"
+          >
+            <UserPlus className="size-4" />
+            Invite people
+          </button>
+        )}
       </div>
 
       {/* stats */}
@@ -367,13 +372,15 @@ export function TeamClient() {
                 </span>
 
                 <div className="relative justify-self-end">
+                  {canManage && (
                   <button
                     onClick={() => setMenuId((v) => (v === m.id ? null : m.id))}
                     className="grid size-8 place-items-center rounded-lg text-ink-soft transition-colors hover:bg-secondary hover:text-ink"
                   >
                     <MoreHorizontal className="size-4" />
                   </button>
-                  {menuId === m.id && (
+                  )}
+                  {canManage && menuId === m.id && (
                     <>
                       <button
                         aria-label="Close"

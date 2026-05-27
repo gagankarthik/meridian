@@ -104,14 +104,16 @@ function FloatChip({
 export function Hero() {
   return (
     <section className="relative overflow-hidden pt-32 pb-24 sm:pt-44 sm:pb-32">
-      {/* ── background: brand aurora + connected-work network ── */}
+      {/* ── background: brand aurora + connected-work network ──
+          Heavy blurs are costly on mobile GPUs, so we run one modest blob on
+          phones and add the rest only from `sm` up. */}
       <div className="pointer-events-none absolute inset-0 -z-10" aria-hidden>
         <div className="brand-wash absolute inset-0" />
-        <div className="absolute left-1/2 top-[-9rem] size-[52rem] -translate-x-1/2 rounded-full bg-signal/14 blur-[150px]" />
-        <div className="absolute right-[0%] top-[8%] size-96 rounded-full bg-[#22a06b]/14 blur-[130px]" />
-        <div className="absolute left-[-4%] top-[26%] size-96 rounded-full bg-[#e2a200]/12 blur-[130px]" />
-        <div className="absolute right-[16%] top-[-2%] size-80 rounded-full bg-[#7a3ff0]/12 blur-[130px]" />
-        <div className="absolute inset-0 opacity-70 [mask-image:radial-gradient(ellipse_75%_65%_at_50%_38%,black,transparent_80%)]">
+        <div className="absolute left-1/2 top-[-7rem] size-[30rem] -translate-x-1/2 rounded-full bg-signal/12 blur-[80px] sm:size-[48rem] sm:blur-[120px]" />
+        <div className="absolute right-[0%] top-[8%] hidden size-96 rounded-full bg-[#22a06b]/14 blur-[120px] sm:block" />
+        <div className="absolute left-[-4%] top-[26%] hidden size-96 rounded-full bg-[#e2a200]/12 blur-[120px] sm:block" />
+        <div className="absolute right-[16%] top-[-2%] hidden size-80 rounded-full bg-[#7a3ff0]/12 blur-[120px] lg:block" />
+        <div className="absolute inset-0 hidden opacity-70 [mask-image:radial-gradient(ellipse_75%_65%_at_50%_38%,black,transparent_80%)] sm:block">
           <NetworkBackdrop />
         </div>
       </div>
