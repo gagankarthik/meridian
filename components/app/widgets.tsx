@@ -135,10 +135,14 @@ export function AvatarStack({
 }
 
 const STATUS_STYLES: Record<string, string> = {
-  "On track": "border-emerald-600/30 bg-emerald-500/10 text-emerald-700",
-  "At risk": "border-amber-600/30 bg-amber-500/10 text-amber-700",
-  "Off track": "border-red-600/30 bg-red-500/10 text-red-700",
-  active: "border-emerald-600/30 bg-emerald-500/10 text-emerald-700",
+  "On track":
+    "border-emerald-600/30 bg-emerald-500/10 text-emerald-700 dark:border-emerald-400/30 dark:bg-emerald-400/10 dark:text-emerald-300",
+  "At risk":
+    "border-amber-600/30 bg-amber-500/10 text-amber-700 dark:border-amber-400/30 dark:bg-amber-400/10 dark:text-amber-300",
+  "Off track":
+    "border-red-600/30 bg-red-500/10 text-red-700 dark:border-red-400/30 dark:bg-red-400/10 dark:text-red-300",
+  active:
+    "border-emerald-600/30 bg-emerald-500/10 text-emerald-700 dark:border-emerald-400/30 dark:bg-emerald-400/10 dark:text-emerald-300",
   invited: "border-line bg-secondary text-ink-muted",
 };
 
@@ -183,7 +187,9 @@ export function StatCard({
       <p
         className={cn(
           "tnum mt-2 inline-flex items-center gap-1 font-mono text-[11px]",
-          positive ? "text-emerald-700" : "text-red-700",
+          positive
+            ? "text-emerald-700 dark:text-emerald-300"
+            : "text-red-700 dark:text-red-300",
         )}
       >
         {positive ? (

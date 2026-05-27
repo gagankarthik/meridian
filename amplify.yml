@@ -3,24 +3,31 @@
 # route handlers + proxy.
 #
 # ── Environment variables ──────────────────────────────────────────────────
-# Set ALL of these in the Amplify console (App settings → Environment
-# variables) for each branch/environment. The preBuild step below writes the
-# PUBLIC (NEXT_PUBLIC_*) ones into .env.production so Next.js inlines them at
-# build time. The SECRET AWS_* keys are intentionally NOT written to any file
-# or inlined — the AWS SDK reads them from the SSR runtime environment, and
-# they must never reach the browser bundle.
+# Set these in the Amplify console (App settings → Environment variables) for
+# each branch. The preBuild step writes the PUBLIC (NEXT_PUBLIC_*) ones into
+# .env.production so Next.js inlines them at build time.
 #
 #   NEXT_PUBLIC_AWS_REGION                  e.g. us-east-2
 #   NEXT_PUBLIC_COGNITO_USER_POOL_ID
 #   NEXT_PUBLIC_COGNITO_USER_POOL_CLIENT_ID
 #   NEXT_PUBLIC_AWS_DYNAMODB_TABLE_NAME     e.g. meridian-dev
 #   NEXT_PUBLIC_AWS_S3_BUCKET
-#   AWS_ACCESS_KEY_ID        (SECRET — runtime only, never NEXT_PUBLIC_)
-#   AWS_SECRET_ACCESS_KEY    (SECRET — runtime only, never NEXT_PUBLIC_)
 #
-# Prefer an Amplify service/compute role with scoped DynamoDB/S3/Cognito
-# permissions over static keys; the SDK picks the role up automatically and
-# you can omit AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY entirely.
+# ── Credentials (server-only) ───────────────────────────────────────────────
+# IMPORTANT: Amplify reserves the "AWS_" prefix, so you CANNOT set
+# AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY in the Amplify console.
+#
+#   RECOMMENDED: attach an IAM role with scoped DynamoDB/S3/Cognito permissions
+#   to the app's compute. The SDK picks it up automatically — set no keys.
+#
+#   ALTERNATIVE (static keys): set non-reserved vars and the app passes them
+#   to the SDK explicitly:
+#     MERIDIAN_AWS_ACCESS_KEY_ID
+#     MERIDIAN_AWS_SECRET_ACCESS_KEY
+#     MERIDIAN_AWS_SESSION_TOKEN   (optional, for temporary credentials)
+#
+# Locally (.env.local) the standard AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY
+# still work — the SDK's default chain reads them automatically.
 version: 1
 frontend:
   phases:

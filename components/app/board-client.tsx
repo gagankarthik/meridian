@@ -392,7 +392,7 @@ export function BoardClient({ projectId }: { projectId: string }) {
                                   ws.removeColumn(col.id);
                                   setMenuCol(null);
                                 }}
-                                className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-[12.5px] font-medium text-red-700 transition-colors hover:bg-red-500/10"
+                                className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-[12.5px] font-medium text-red-700 transition-colors hover:bg-red-500/10 dark:text-red-300"
                               >
                                 <Trash2 className="size-3.5" />
                                 Remove column

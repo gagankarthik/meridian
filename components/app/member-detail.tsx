@@ -27,7 +27,8 @@ import { cn } from "@/lib/utils";
 
 const ROLE_BADGE: Record<ProjectRole, string> = {
   Lead: "border-signal/30 bg-signal-soft text-signal",
-  Reviewer: "border-amber-600/30 bg-amber-500/10 text-amber-700",
+  Reviewer:
+    "border-amber-600/30 bg-amber-500/10 text-amber-700 dark:border-amber-400/30 dark:bg-amber-400/10 dark:text-amber-300",
   Member: "border-line bg-secondary text-ink-muted",
 };
 
@@ -332,7 +333,7 @@ export function MemberDetail({ id }: { id: string }) {
                     className={cn(
                       "hidden shrink-0 items-center rounded-md border px-2 py-0.5 text-[10px] font-bold tracking-wide uppercase sm:inline-flex",
                       done
-                        ? "border-emerald-600/30 bg-emerald-500/10 text-emerald-700"
+                        ? "border-emerald-600/30 bg-emerald-500/10 text-emerald-700 dark:border-emerald-400/30 dark:bg-emerald-400/10 dark:text-emerald-300"
                         : "border-line bg-secondary text-ink-muted",
                     )}
                   >

@@ -765,7 +765,7 @@ function ActionItem({
       className={cn(
         "flex w-full items-center gap-2.5 px-3 py-2 text-[13px] font-medium transition-colors",
         danger
-          ? "text-red-600 hover:bg-red-50"
+          ? "text-red-600 hover:bg-red-500/10 dark:text-red-400"
           : "text-ink-muted hover:bg-secondary hover:text-ink",
       )}
     >

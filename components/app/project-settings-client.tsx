@@ -159,7 +159,7 @@ export function ProjectSettingsClient({ projectId }: { projectId: string }) {
             </Field>
           </div>
           {startDate && endDate && endDate < startDate && (
-            <p className="text-[12px] font-medium text-red-600">
+            <p className="text-[12px] font-medium text-red-600 dark:text-red-400">
               End date is before the start date.
             </p>
           )}
@@ -191,7 +191,7 @@ export function ProjectSettingsClient({ projectId }: { projectId: string }) {
 
         <footer className="flex items-center justify-end gap-3 border-t border-line bg-paper-raised px-5 py-3.5">
           {saved && (
-            <span className="inline-flex items-center gap-1.5 text-[13px] font-semibold text-emerald-700">
+            <span className="inline-flex items-center gap-1.5 text-[13px] font-semibold text-emerald-700 dark:text-emerald-300">
               <span className="grid size-5 place-items-center rounded-full bg-emerald-600 text-white">
                 <Check className="size-3" strokeWidth={3} />
               </span>
@@ -239,7 +239,7 @@ export function ProjectSettingsClient({ projectId }: { projectId: string }) {
       {/* Danger zone */}
       <section className="rounded-2xl border border-red-500/40 bg-card shadow-card">
         <header className="border-b border-red-500/20 px-5 py-3.5">
-          <h2 className="text-[14px] font-bold tracking-tight text-red-600">
+          <h2 className="text-[14px] font-bold tracking-tight text-red-600 dark:text-red-400">
             Danger zone
           </h2>
           <p className="mt-0.5 text-[12px] text-ink-soft">

@@ -1,6 +1,7 @@
 import "server-only";
 import { DynamoDBClient } from "@aws-sdk/client-dynamodb";
 import { DynamoDBDocument } from "@aws-sdk/lib-dynamodb";
+import { awsCredentials } from "@/lib/aws-credentials";
 
 /**
  * Single-table DynamoDB access. Every workspace's data lives under one
@@ -30,9 +31,10 @@ export const ddbConfigured = Boolean(
 let _doc: DynamoDBDocument | null = null;
 export function doc(): DynamoDBDocument {
   if (!_doc) {
-    _doc = DynamoDBDocument.from(new DynamoDBClient({ region: AWS_REGION }), {
-      marshallOptions: { removeUndefinedValues: true },
-    });
+    _doc = DynamoDBDocument.from(
+      new DynamoDBClient({ region: AWS_REGION, credentials: awsCredentials() }),
+      { marshallOptions: { removeUndefinedValues: true } },
+    );
   }
   return _doc;
 }

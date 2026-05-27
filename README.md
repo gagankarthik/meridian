@@ -1,102 +1,69 @@
 # Meridian
 
-**The operating system for ambitious teams** — an enterprise project &
-work-management platform. Premium marketing site + an interactive product app,
-built to a "Swiss Signal" design language (warm paper, ink black, one electric
-signal-orange accent, sharp grid, mono numerals).
-
-> Status: **Frontend complete** (marketing + app shell with realistic mock
-> data). The backend is intentionally deferred and the data layer is typed so
-> AWS (Cognito · DynamoDB · S3 · Amplify) drops in without UI changes.
+**The operating system for ambitious teams.** Meridian brings planning,
+execution, and reporting into one place — so the work, the people, and the
+progress all live on a single map.
 
 ---
 
-## Stack
+## Why Meridian
 
-| Layer       | Choice                                                              |
-| ----------- | ------------------------------------------------------------------- |
-| Framework   | **Next.js 16** (App Router, RSC, Turbopack)                         |
-| Language    | TypeScript 5, React 19                                              |
-| Styling     | **Tailwind CSS v4** (CSS-first `@theme`) + custom design tokens     |
-| Components  | **shadcn/ui** on **Base UI** (`@base-ui/react`)                     |
-| Motion      | **Framer Motion** (`motion/react`)                                  |
-| Icons       | lucide-react                                                        |
-| Type system | Archivo (display/UI) + IBM Plex Mono (numerals/labels)              |
+Most teams stitch together a board here, a doc there, and a spreadsheet for
+status. Context scatters and momentum leaks. Meridian replaces that sprawl with
+one connected workspace where every project, task, and decision is visible and
+moving forward.
 
-### Design skills installed
-
-- `frontend-design` (official Claude skill) — anti-slop design intelligence.
-- **Taste-Skill** — `npx skills add Leonxlnx/taste-skill` → 13 skills in
-  `.agents/skills/`.
-- _UI-UX-Pro-Max_ (`uipro-cli`) — optional, install yourself:
-  `npx -p uipro-cli uipro init --ai claude`.
+- **One source of truth** — projects, tasks, owners, and timelines stay in sync.
+- **See work the way you think** — switch any project between Board, Table,
+  Timeline, and a live Overview without losing context.
+- **From intake to outcome** — capture requests, plan the work, ship it, and
+  report on it in one continuous flow.
 
 ---
 
-## Getting started
+## What you can do
 
-```bash
-npm install
-npm run dev      # http://localhost:3000
-npm run build    # production build (typecheck + prerender)
-npm run lint
-```
+### Plan & track
+- **Boards** — drag-and-drop kanban with priorities, assignees, due dates, and
+  per-project search + filter.
+- **Table** — a dense, sortable grid for power users.
+- **Timeline** — a portfolio Gantt that lays every initiative across the
+  quarters, driven by real project start/end dates.
+- **Roadmap** — see the whole portfolio at a glance; click any initiative for
+  its details, schedule, and team.
 
----
+### Collaborate
+- **Tasks with depth** — descriptions, sub-tasks, reviewers, labels, comments,
+  and a full task page reachable from every view.
+- **Approvals** — request sign-off, approve or reject, and keep an auditable
+  status for everyone.
+- **Attachments** — keep specs, designs, and files attached to the work.
+- **Team & roles** — invite teammates by email with a role; leads, reviewers,
+  and members each see what they should.
 
-## Routes
-
-| Route            | What it is                                                            |
-| ---------------- | --------------------------------------------------------------------- |
-| `/`              | Marketing site — hero w/ live board, platform, workflow, interactive Board/Timeline/Dashboard tabs, animated metrics, testimonials, security, pricing, CTA |
-| `/app`           | Dashboard — stats, projects, my tasks, activity, team                 |
-| `/app/board`     | Kanban board with **native drag-and-drop** + project filters          |
-| `/app/timeline`  | Portfolio Gantt with swimlanes + "today" marker                       |
-| `/app/team`      | Members table + **invite flow** (Cognito-ready dialog)                |
-
----
-
-## Project structure
-
-```
-app/
-  layout.tsx            # fonts (Archivo + IBM Plex Mono), metadata
-  globals.css           # Swiss Signal tokens + custom utilities
-  page.tsx              # marketing landing
-  app/                  # authenticated product (URL: /app)
-    layout.tsx          # dark sidebar + topbar shell
-    page.tsx            # dashboard
-    board/ timeline/ team/
-components/
-  brand/                # Meridian mark + wordmark
-  marketing/            # landing sections (nav, hero, views, pricing, …)
-  app/                  # sidebar, topbar, widgets, board/team clients
-  ui/                   # shadcn (Base UI) primitives
-lib/
-  site.ts               # marketing content
-  app-data.ts           # typed domain data (Members, Projects, Tasks, …)
-  utils.ts              # cn()
-```
+### Run the business
+- **Dashboards & reports** — real-time KPIs, workload by assignee, status and
+  priority breakdowns, and recent activity.
+- **Notifications** — stay on top of mentions, assignments, and approvals.
+- **Your workspace, your brand** — company name, logo, and details, with a
+  light/dark theme and preferences that follow you.
 
 ---
 
-## Wiring the AWS backend (next phase)
+## Built for teams that ship
 
-The types in `lib/app-data.ts` are modeled for a clean swap to **Amplify Gen 2**:
+Meridian is designed for software, marketing, operations, and IT teams alike —
+anywhere work needs a clear owner, a clear plan, and a clear finish line.
+Secure accounts, role-based access, and a fast, focused interface that gets out
+of the way.
 
-1. **Scaffold** — `npm create amplify@latest` then define resources:
-   - `amplify/auth/resource.ts` → **Cognito** user pool, groups
-     (`Owner/Admin/Member/Guest`), email invitations.
-   - `amplify/data/resource.ts` → **DynamoDB** via Amplify Data:
-     `Workspace`, `Project`, `Task`, `Member`, `Activity` (owner/group auth).
-   - `amplify/storage/resource.ts` → **S3** for attachments & avatars,
-     keyed `workspaceId/taskId/*`.
-2. **Run** — `npx ampx sandbox` (uses *your* AWS credentials) generates
-   `amplify_outputs.json`.
-3. **Connect** — replace the static arrays with `generateClient<Schema>()`
-   queries. The UI components take the same shapes, so nothing else changes.
-4. **Invites** — the Team dialog's `invite()` calls
-   `adminCreateUser` / `adminAddUserToGroup` on Cognito instead of local state.
+---
+
+## Security & privacy
+
+Authentication is backed by Amazon Cognito, with role-based access across the
+workspace. Your data is yours — see the in-app [Privacy Policy](/privacy) and
+[Terms](/terms) for details on how it's handled.
 
 ---
 

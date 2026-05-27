@@ -256,7 +256,7 @@ function ProductivityOverview({ hasData }: { hasData: boolean }) {
             <span className="tnum font-display text-2xl font-extrabold tracking-tight text-ink">
               {avg}%
             </span>
-            <span className="inline-flex items-center gap-0.5 rounded-full bg-emerald-500/12 px-1.5 py-0.5 text-[11px] font-bold text-emerald-700">
+            <span className="inline-flex items-center gap-0.5 rounded-full bg-emerald-500/12 px-1.5 py-0.5 text-[11px] font-bold text-emerald-700 dark:text-emerald-300">
               <ArrowUpRight className="size-3" strokeWidth={2.4} />
               +7%
             </span>

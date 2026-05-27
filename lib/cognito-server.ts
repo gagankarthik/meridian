@@ -1,5 +1,6 @@
 import "server-only";
 import { CognitoIdentityProviderClient } from "@aws-sdk/client-cognito-identity-provider";
+import { awsCredentials } from "@/lib/aws-credentials";
 
 /** Server-side Cognito admin config (never exposed to the client). */
 export const serverPoolId =
@@ -14,5 +15,8 @@ export const serverRegion =
 export const serverConfigured = Boolean(serverPoolId);
 
 export function cognitoServerClient() {
-  return new CognitoIdentityProviderClient({ region: serverRegion });
+  return new CognitoIdentityProviderClient({
+    region: serverRegion,
+    credentials: awsCredentials(),
+  });
 }

@@ -5,6 +5,7 @@ import {
   PutObjectCommand,
 } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
+import { awsCredentials } from "@/lib/aws-credentials";
 
 export const S3_BUCKET =
   process.env.NEXT_PUBLIC_AWS_S3_BUCKET ?? process.env.S3_BUCKET ?? "";
@@ -14,7 +15,7 @@ export const s3Configured = Boolean(S3_BUCKET);
 
 let _s3: S3Client | null = null;
 function s3(): S3Client {
-  if (!_s3) _s3 = new S3Client({ region: AWS_REGION });
+  if (!_s3) _s3 = new S3Client({ region: AWS_REGION, credentials: awsCredentials() });
   return _s3;
 }
 

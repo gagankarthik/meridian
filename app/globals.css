@@ -142,32 +142,61 @@
 }
 
 .dark {
+  /* Atlas Midnight — tuned for AA contrast on dark surfaces */
   --paper: #0b1929;
-  --paper-raised: #11243a;
-  --sunken: #0d1b2c;
-  --ink: #e6edf7;
-  --ink-muted: #9fb0c9;
-  --ink-soft: #7184a0;
-  --line: #1d3151;
-  --line-strong: #2f4a72;
+  --paper-raised: #13263c;
+  --sunken: #0a1626;
+  --ink: #eaf1fb; /* headlines */
+  --ink-muted: #b3c2d9; /* body — brighter for readable contrast */
+  --ink-soft: #8497b5; /* captions */
+  --signal: #3b82f6; /* accent text/links: ~4.6:1 on cards; button bg w/ white */
+  --signal-strong: #5a9bff; /* hover — brighter in dark */
+  --signal-soft: #18324f; /* dark-blue tint for chips/active (was near-white) */
+  --signal-ink: #ffffff;
+  --signal-foreground: #ffffff;
+  --line: #243d61; /* visible borders on dark */
+  --line-strong: #36537d;
+
+  /* Brighter accent hues so colored text/fills stay legible on dark */
+  --grape: #9d8cf2;
+  --teal: #3cc4d6;
+  --green: #41c98c;
+  --yellow: #f2bd3f;
 
   --background: #0b1929;
-  --foreground: #e6edf7;
-  --card: #11243a;
-  --card-foreground: #e6edf7;
-  --popover: #11243a;
-  --popover-foreground: #e6edf7;
-  --primary: #4c9aff;
-  --primary-foreground: #06121f;
-  --secondary: #16293f;
-  --secondary-foreground: #e6edf7;
-  --muted: #16293f;
-  --muted-foreground: #9fb0c9;
-  --accent: #14304f;
-  --accent-foreground: #4c9aff;
-  --border: #1d3151;
-  --input: #1d3151;
-  --ring: #4c9aff;
+  --foreground: #eaf1fb;
+  --card: #13263c;
+  --card-foreground: #eaf1fb;
+  --popover: #162940;
+  --popover-foreground: #eaf1fb;
+  --primary: #3b82f6;
+  --primary-foreground: #ffffff;
+  --secondary: #1a3450;
+  --secondary-foreground: #eaf1fb;
+  --muted: #18304a;
+  --muted-foreground: #b3c2d9;
+  --accent: #18324f;
+  --accent-foreground: #cfe0ff;
+  --destructive: #f06a54; /* brighter red for dark */
+  --border: #243d61;
+  --input: #243d61;
+  --ring: #3b82f6;
+
+  --chart-1: #5a9bff;
+  --chart-2: #9d8cf2;
+  --chart-3: #3cc4d6;
+  --chart-4: #41c98c;
+  --chart-5: #f2bd3f;
+
+  /* Dark nav rail (was inheriting the light values) */
+  --sidebar: #0a1726;
+  --sidebar-foreground: #b3c2d9;
+  --sidebar-primary: #3b82f6;
+  --sidebar-primary-foreground: #ffffff;
+  --sidebar-accent: #18324f;
+  --sidebar-accent-foreground: #cfe0ff;
+  --sidebar-border: #1c3251;
+  --sidebar-ring: #3b82f6;
 }
 
 @layer base {
