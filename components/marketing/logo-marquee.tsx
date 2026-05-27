@@ -87,7 +87,7 @@ export function LogoMarquee() {
     <section className="border-y border-line bg-paper-raised py-10">
       <div className="mx-auto flex max-w-[1240px] flex-col gap-6 px-5 sm:px-8 lg:px-12">
         <p className="text-center text-[12px] font-semibold uppercase tracking-[0.18em] text-ink-soft">
-          Trusted by modern teams at companies of every size
+          Built for modern teams of every size
         </p>
         <div className="group relative overflow-hidden [mask-image:linear-gradient(to_right,transparent,black_10%,black_90%,transparent)]">
           <div className="flex w-max animate-marquee items-center gap-12 pr-12 group-hover:[animation-play-state:paused]">

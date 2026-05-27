@@ -115,11 +115,12 @@ export const WORKFLOW: WorkflowStep[] = [
 
 export type Metric = { value: number; suffix: string; label: string };
 
+/* Product facts, not invented adoption stats — every number is verifiable. */
 export const METRICS: Metric[] = [
-  { value: 99.99, suffix: "%", label: "Platform uptime, multi-region" },
-  { value: 4.2, suffix: "M", label: "Tasks shipped each week" },
-  { value: 38, suffix: "%", label: "Less time in status meetings" },
-  { value: 100, suffix: "ms", label: "Median read, anywhere on earth" },
+  { value: 4, suffix: "", label: "Built-in views: board, table, timeline & overview" },
+  { value: 1, suffix: "", label: "Connected source of truth for every project" },
+  { value: 3, suffix: "", label: "Project roles with scoped access" },
+  { value: 0, suffix: "", label: "Status meetings required — live dashboards instead" },
 ];
 
 export type Testimonial = {

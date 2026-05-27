@@ -116,7 +116,7 @@ export function TeamClient() {
     setEmails((list) => list.filter((e) => e !== target));
   }
 
-  function sendInvites() {
+  async function sendInvites() {
     // Fold any leftover text in the input into a chip first.
     const draft = emailDraft.trim();
     let pending = emails;
@@ -141,16 +141,6 @@ export function TeamClient() {
       return ROLE_RANK[r] > ROLE_RANK[best] ? r : best;
     }, "Member");
 
-    // Provision the invites in Cognito (no-op in demo mode); keep the UI
-    // responsive by not blocking on the network.
-    void authedFetch("/api/team/invite", {
-      method: "POST",
-      body: JSON.stringify({
-        emails: pending,
-        groups: selected.map((pid) => `${pid}#${projectRoles[pid] ?? "Member"}`),
-      }),
-    }).catch(() => {});
-
     const created: Member[] = pending.map((email, i) => {
       const local = email.split("@")[0];
       return {
@@ -165,12 +155,36 @@ export function TeamClient() {
       };
     });
 
+    // Optimistically add, then reflect the real result of provisioning.
     setMembers((m) => [...m, ...created]);
-    flash(
-      `Invited ${pending.length} ${pending.length === 1 ? "person" : "people"} to ${selected.length} project${selected.length === 1 ? "" : "s"}`,
-    );
     resetInvite();
     setOpen(false);
+
+    try {
+      const res = await authedFetch("/api/team/invite", {
+        method: "POST",
+        body: JSON.stringify({
+          emails: pending,
+          groups: selected.map((pid) => `${pid}#${projectRoles[pid] ?? "Member"}`),
+        }),
+      });
+      const data = await res.json().catch(() => null);
+      const results: { ok: boolean; error?: string }[] = data?.results ?? [];
+      const failed = results.filter((r) => !r.ok);
+      if (data?.skipped) {
+        flash(`Invited ${pending.length} (demo mode — no email sent)`);
+      } else if (!res.ok || failed.length) {
+        const reason =
+          failed[0]?.error ?? data?.error ?? "check Cognito email & IAM permissions";
+        flash(`Some invites failed — ${reason}`);
+      } else {
+        flash(
+          `Invitation email sent to ${pending.length} ${pending.length === 1 ? "person" : "people"}`,
+        );
+      }
+    } catch {
+      flash("Couldn't reach the invite service. Please try again.");
+    }
   }
 
   function setMemberRole(id: string, r: Role) {

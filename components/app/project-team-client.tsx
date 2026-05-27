@@ -209,7 +209,7 @@ export function ProjectTeamClient({ projectId }: { projectId: string }) {
     setEmails((list) => list.filter((e) => e !== target));
   }
 
-  function sendInvites() {
+  async function sendInvites() {
     const draft = emailDraft.trim();
     let pending = emails;
     if (draft) {
@@ -227,15 +227,6 @@ export function ProjectTeamClient({ projectId }: { projectId: string }) {
       return;
     }
 
-    // Provision the invites in Cognito (no-op in demo mode), best-effort.
-    void authedFetch("/api/team/invite", {
-      method: "POST",
-      body: JSON.stringify({
-        emails: pending,
-        groups: [`${projectId}#${inviteRole}`],
-      }),
-    }).catch(() => {});
-
     const created: Invite[] = pending.map((email, i) => ({
       projectId,
       role: inviteRole,
@@ -252,11 +243,34 @@ export function ProjectTeamClient({ projectId }: { projectId: string }) {
     }));
 
     setInvites((list) => [...list, ...created]);
-    flash(
-      `Invited ${pending.length} ${pending.length === 1 ? "person" : "people"} to ${project?.name ?? "this project"} as ${inviteRole}`,
-    );
     resetInvite();
     setInviteOpen(false);
+
+    try {
+      const res = await authedFetch("/api/team/invite", {
+        method: "POST",
+        body: JSON.stringify({
+          emails: pending,
+          groups: [`${projectId}#${inviteRole}`],
+        }),
+      });
+      const data = await res.json().catch(() => null);
+      const results: { ok: boolean; error?: string }[] = data?.results ?? [];
+      const failed = results.filter((r) => !r.ok);
+      if (data?.skipped) {
+        flash(`Invited ${pending.length} (demo mode — no email sent)`);
+      } else if (!res.ok || failed.length) {
+        const reason =
+          failed[0]?.error ?? data?.error ?? "check Cognito email & IAM permissions";
+        flash(`Some invites failed — ${reason}`);
+      } else {
+        flash(
+          `Invitation sent to ${pending.length} ${pending.length === 1 ? "person" : "people"} as ${inviteRole}`,
+        );
+      }
+    } catch {
+      flash("Couldn't reach the invite service. Please try again.");
+    }
   }
 
   return (

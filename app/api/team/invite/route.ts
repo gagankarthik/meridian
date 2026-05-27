@@ -20,9 +20,11 @@ function initials(s: string) {
 }
 
 /**
- * Invites teammates: creates the Cognito user (emails them a temp password)
- * and a DynamoDB member record under the inviter's workspace so they appear
- * immediately and skip onboarding on first sign-in.
+ * Invites teammates using Cognito's BUILT-IN invitation email (no SES). The
+ * AdminCreateUser call below emails the temp password via the user pool's
+ * configured sender — set the pool's email to "Send email with Cognito" in the
+ * console (Messaging → Email) to use the built-in sender. A DynamoDB member
+ * record is also created so they appear immediately and skip onboarding.
  *
  * Body: { emails: string[]; groups?: string[] }  (groups: "<projectId>#<Role>")
  */
@@ -58,21 +60,40 @@ export async function POST(request: Request) {
 
   const results = await Promise.all(
     emails.map(async (email) => {
+      let alreadyInvited = false;
       try {
         if (serverConfigured) {
           const client = cognitoServerClient();
-          await client.send(
-            new AdminCreateUserCommand({
-              UserPoolId: serverPoolId,
-              Username: email,
-              DesiredDeliveryMediums: ["EMAIL"],
-              UserAttributes: [
-                { Name: "email", Value: email },
-                { Name: "email_verified", Value: "true" },
-                { Name: "name", Value: nameFromEmail(email) },
-              ],
-            }),
-          );
+          try {
+            await client.send(
+              new AdminCreateUserCommand({
+                UserPoolId: serverPoolId,
+                Username: email,
+                DesiredDeliveryMediums: ["EMAIL"],
+                UserAttributes: [
+                  { Name: "email", Value: email },
+                  { Name: "email_verified", Value: "true" },
+                  { Name: "name", Value: nameFromEmail(email) },
+                ],
+              }),
+            );
+          } catch (e) {
+            // Already created but never signed in → RESEND the invite email
+            // (covers the "invited earlier, email never arrived" case).
+            if ((e as { name?: string })?.name === "UsernameExistsException") {
+              alreadyInvited = true;
+              await client.send(
+                new AdminCreateUserCommand({
+                  UserPoolId: serverPoolId,
+                  Username: email,
+                  MessageAction: "RESEND",
+                  DesiredDeliveryMediums: ["EMAIL"],
+                }),
+              );
+            } else {
+              throw e;
+            }
+          }
           for (const g of groups) {
             try {
               await client.send(
@@ -88,7 +109,9 @@ export async function POST(request: Request) {
           }
         }
 
-        if (ddbConfigured) {
+        // Only create a member record for a brand-new invite — a RESEND
+        // targets someone already in the workspace, so skip (no duplicates).
+        if (ddbConfigured && !alreadyInvited) {
           const memberId = `inv-${crypto.randomUUID().slice(0, 8)}`;
           const name = nameFromEmail(email);
           await putItem(
@@ -110,12 +133,14 @@ export async function POST(request: Request) {
             ),
           );
         }
-        return { email, ok: true };
+        return { email, ok: true, resent: alreadyInvited };
       } catch (err) {
+        console.error("[invite] failed for", email, err);
+        const e = err as { name?: string; message?: string };
         return {
           email,
           ok: false,
-          error: err instanceof Error ? err.message : "invite failed",
+          error: `${e?.name ?? "Error"}: ${e?.message ?? "invite failed"}`,
         };
       }
     }),
