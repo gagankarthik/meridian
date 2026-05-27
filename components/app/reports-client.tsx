@@ -15,7 +15,7 @@ import {
   projectById,
 } from "@/lib/app-data";
 import type { Priority, Project, Task } from "@/lib/app-data";
-import { Avatar, Panel, ProgressBar, StatCard } from "@/components/app/widgets";
+import { Avatar, Panel, StatCard } from "@/components/app/widgets";
 import { useWorkspace } from "@/components/app/workspace";
 import { cn } from "@/lib/utils";
 
@@ -37,23 +37,77 @@ const RANGES: { id: RangeId; label: string }[] = [
   { id: "quarter", label: "Quarter" },
 ];
 
-const TREND_META: Record<RangeId, { count: number; prefix: string }> = {
-  "7d": { count: 7, prefix: "D" },
-  "30d": { count: 8, prefix: "W" },
-  quarter: { count: 6, prefix: "M" },
+const MONTH_NAMES_SHORT = [
+  "Jan", "Feb", "Mar", "Apr", "May", "Jun",
+  "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
+];
+const MONTH_IDX: Record<string, number> = {
+  jan: 0, feb: 1, mar: 2, apr: 3, may: 4, jun: 5,
+  jul: 6, aug: 7, sep: 8, oct: 9, nov: 10, dec: 11,
 };
-const QUARTER_LABELS = ["Feb", "Mar", "Apr", "May", "Jun", "Jul"];
 
-/* Deterministic seeded series so a (project, range) pair is stable across renders. */
-function seededSeries(seed: number, count: number, base: number, spread: number) {
-  const out: number[] = [];
-  let s = seed * 9301 + 49297;
-  for (let i = 0; i < count; i++) {
-    s = (s * 9301 + 49297) % 233280;
-    const r = s / 233280;
-    out.push(Math.max(1, Math.round(base + (i / count) * spread + r * spread * 0.5)));
+/* Parse a due string like "Jul 14, 2026" → Date (or null). */
+function parseDueDate(due: string): Date | null {
+  const m = due.match(/^([A-Za-z]{3})\s+(\d{1,2}),\s*(\d{4})$/);
+  if (!m) return null;
+  const mi = MONTH_IDX[m[1].toLowerCase()];
+  if (mi === undefined) return null;
+  return new Date(Number(m[3]), mi, Number(m[2]));
+}
+
+const DAY_MS = 86400000;
+const dayNum = (d: Date) => Math.floor(d.getTime() / DAY_MS);
+
+/* Build a real completed/planned trend by bucketing tasks on their due date
+   into the trailing window for the selected range. No fabricated data — empty
+   windows simply read zero. */
+function buildTrend(tasks: Task[], range: RangeId) {
+  const dated = tasks.flatMap((t) => {
+    const d = parseDueDate(t.due);
+    return d ? [{ done: t.column === "done", date: d }] : [];
+  });
+
+  const now = new Date();
+  const count = range === "7d" ? 7 : 6;
+  const completed = new Array(count).fill(0);
+  const planned = new Array(count).fill(0);
+  const labels: string[] = [];
+
+  if (range === "quarter") {
+    const nowM = now.getFullYear() * 12 + now.getMonth();
+    for (let i = 0; i < count; i++) {
+      labels.push(MONTH_NAMES_SHORT[((nowM - (count - 1 - i)) % 12 + 12) % 12]);
+    }
+    for (const { done, date } of dated) {
+      const m = date.getFullYear() * 12 + date.getMonth();
+      const diff = nowM - m;
+      if (diff >= 0 && diff < count) {
+        const idx = count - 1 - diff;
+        planned[idx] += 1;
+        if (done) completed[idx] += 1;
+      }
+    }
+  } else {
+    const span = range === "7d" ? 1 : 7; // days per bucket
+    const today = dayNum(now);
+    for (let i = 0; i < count; i++) {
+      const end = today - (count - 1 - i) * span;
+      const d = new Date(end * DAY_MS);
+      labels.push(range === "7d" ? String(d.getDate()) : `W${i + 1}`);
+    }
+    for (const { done, date } of dated) {
+      const diffDays = today - dayNum(date);
+      if (diffDays < 0) continue;
+      const bucket = Math.floor(diffDays / span);
+      if (bucket >= 0 && bucket < count) {
+        const idx = count - 1 - bucket;
+        planned[idx] += 1;
+        if (done) completed[idx] += 1;
+      }
+    }
   }
-  return out;
+
+  return { labels, completed, planned };
 }
 
 /* --------------------------------- view ---------------------------------- */
@@ -79,29 +133,19 @@ export function ReportsClient() {
   );
 
   const done = tasks.filter((t) => t.column === "done").length;
-  const total = tasks.length || 1;
-  const completionRate = Math.round((done / total) * 100);
+  const total = tasks.length;
+  const completionRate = total ? Math.round((done / total) * 100) : 0;
   const inFlight = tasks.filter(
     (t) => t.column === "in_progress" || t.column === "review",
   ).length;
 
-  /* Deterministic cycle time (days) derived from in-flight + project scope. */
-  const cycleTime = useMemo(() => {
-    const seed = projectId === "all" ? 11 : Number(projectId.replace(/\D/g, "")) || 1;
-    return (3.2 + (seed % 4) * 0.7 + inFlight * 0.18).toFixed(1);
-  }, [projectId, inFlight]);
+  /* Real trend bucketed on due dates for the selected range. */
+  const trend = useMemo(() => buildTrend(tasks, range), [tasks, range]);
+  /* Velocity = tasks completed within the visible window (real throughput). */
+  const velocity = trend.completed.reduce((a, b) => a + b, 0);
+  const rangeUnit = range === "7d" ? "wk" : range === "30d" ? "6w" : "6mo";
 
-  const velocity = useMemo(() => {
-    const seed =
-      (projectId === "all" ? 17 : Number(projectId.replace(/\D/g, "")) || 1) +
-      range.length;
-    return Math.round(
-      seededSeries(seed, 4, projectId === "all" ? 14 : 6, 8).reduce(
-        (a, b) => a + b,
-        0,
-      ) / 4,
-    );
-  }, [projectId, range]);
+  const empty = total === 0;
 
   return (
     <div className="space-y-6 p-5 sm:p-6 lg:p-8">
@@ -123,42 +167,42 @@ export function ReportsClient() {
         />
       </div>
 
-      {/* KPI tiles */}
+      {/* KPI tiles — all derived from real tasks (zeros when empty) */}
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
         <StatCard
-          label="Completion rate"
-          value={`${completionRate}%`}
-          delta="+5% vs prior"
+          label="Total tasks"
+          value={String(total)}
+          delta="all statuses"
+          positive
+          icon={TrendingUp}
+        />
+        <StatCard
+          label="Completed"
+          value={String(done)}
+          delta={`${completionRate}% of total`}
           positive
           icon={CheckCircle2}
         />
         <StatCard
-          label="Avg velocity"
-          value={`${velocity}/wk`}
-          delta="trending up"
-          positive
-          icon={Zap}
-        />
-        <StatCard
-          label="Cycle time"
-          value={`${cycleTime}d`}
-          delta="-0.4d faster"
+          label="In progress"
+          value={String(inFlight)}
+          delta="active now"
           positive
           icon={Clock}
         />
         <StatCard
-          label="In flight"
-          value={String(inFlight)}
-          delta={`${tasks.length} total`}
+          label="Velocity"
+          value={`${velocity}/${rangeUnit}`}
+          delta="completed in range"
           positive
-          icon={TrendingUp}
+          icon={Zap}
         />
       </div>
 
-      {/* velocity trend (2/3) + cycle gauge (1/3) */}
+      {/* velocity trend (2/3) + completion gauge (1/3) */}
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
-        <VelocityTrend projectId={projectId} range={range} />
-        <CycleGauge cycleTime={Number(cycleTime)} completion={completionRate} />
+        <VelocityTrend trend={trend} empty={empty} />
+        <CompletionGauge done={done} total={total} completion={completionRate} />
       </div>
 
       {/* throughput by project (2/3) + status distribution (1/3) */}
@@ -321,36 +365,37 @@ function DropdownItem({
 /* ---------------------- 1) velocity / completion trend -------------------- */
 
 function VelocityTrend({
-  projectId,
-  range,
+  trend,
+  empty,
 }: {
-  projectId: string;
-  range: RangeId;
+  trend: { labels: string[]; completed: number[]; planned: number[] };
+  empty: boolean;
 }) {
   const [hovered, setHovered] = useState<number | null>(null);
+  const { labels, completed, planned } = trend;
 
-  const { labels, completed, planned } = useMemo(() => {
-    const meta = TREND_META[range];
-    const seed =
-      (projectId === "all" ? 23 : Number(projectId.replace(/\D/g, "")) || 1) +
-      range.length * 5;
-    const scale = projectId === "all" ? 1 : 0.4;
-    const completed = seededSeries(
-      seed,
-      meta.count,
-      range === "7d" ? 3 : range === "30d" ? 8 : 18,
-      range === "7d" ? 6 : range === "30d" ? 16 : 26,
-    ).map((v) => Math.max(1, Math.round(v * scale)));
-    /* planned slightly above completed for a believable "target" line */
-    const planned = completed.map((v, i) =>
-      Math.round(v + 2 + ((seed + i) % 3)),
+  if (empty) {
+    return (
+      <Panel
+        title="Velocity trend"
+        className="lg:col-span-2"
+        action={
+          <div className="flex items-center gap-3">
+            <Legend color="var(--signal)" label="Completed" />
+            <Legend color="var(--ink-soft)" label="Planned" dashed />
+          </div>
+        }
+      >
+        <div className="flex h-52 flex-col items-center justify-center gap-2 text-center">
+          <Zap className="size-6 text-ink-soft" strokeWidth={1.6} />
+          <p className="text-[13px] font-semibold text-ink">No velocity yet</p>
+          <p className="text-[12px] text-ink-soft">
+            Completed tasks will chart here as work ships.
+          </p>
+        </div>
+      </Panel>
     );
-    const labels =
-      range === "quarter"
-        ? QUARTER_LABELS.slice(-meta.count)
-        : Array.from({ length: meta.count }, (_, i) => `${meta.prefix}${i + 1}`);
-    return { labels, completed, planned };
-  }, [projectId, range]);
+  }
 
   const W = 560;
   const H = 200;
@@ -540,28 +585,29 @@ function Legend({
 
 /* --------------------------- 2) cycle-time gauge -------------------------- */
 
-function CycleGauge({
-  cycleTime,
+function CompletionGauge({
+  done,
+  total,
   completion,
 }: {
-  cycleTime: number;
+  done: number;
+  total: number;
   completion: number;
 }) {
-  /* Map cycle time onto a 0-180deg arc: 0d=fast(good), 12d=slow(bad). */
-  const ratio = Math.min(1, Math.max(0, cycleTime / 12));
+  const ratio = Math.min(1, Math.max(0, completion / 100));
   const r = 60;
   const c = Math.PI * r; // semicircle length
   const filled = c * ratio;
-  const label = ratio < 0.4 ? "Healthy" : ratio < 0.7 ? "Watch" : "Slow";
+  const open = total - done;
+  const label = completion >= 70 ? "On pace" : completion >= 35 ? "In progress" : "Early";
   const labelColor =
-    ratio < 0.4 ? "#22a06b" : ratio < 0.7 ? "#e2a200" : "#e34935";
+    completion >= 70 ? "#22a06b" : completion >= 35 ? "#2563eb" : "#e2a200";
 
   return (
-    <Panel title="Cycle time">
+    <Panel title="Completion">
       <div className="flex flex-col items-center gap-4">
         <div className="relative h-28 w-44">
           <svg viewBox="0 0 160 88" className="h-28 w-44">
-            {/* track */}
             <path
               d="M 20 80 A 60 60 0 0 1 140 80"
               fill="none"
@@ -569,7 +615,6 @@ function CycleGauge({
               strokeWidth="14"
               strokeLinecap="round"
             />
-            {/* fill */}
             <motion.path
               d="M 20 80 A 60 60 0 0 1 140 80"
               fill="none"
@@ -584,10 +629,10 @@ function CycleGauge({
           </svg>
           <div className="absolute inset-x-0 bottom-0 flex flex-col items-center">
             <span className="tnum font-display text-[2.1rem] leading-none font-extrabold tracking-tight text-ink">
-              {cycleTime.toFixed(1)}
+              {completion}%
             </span>
             <span className="text-[11px] font-semibold text-ink-soft">
-              days / task
+              complete
             </span>
           </div>
         </div>
@@ -599,14 +644,19 @@ function CycleGauge({
           {label}
         </span>
 
-        <div className="w-full space-y-2 border-t border-line pt-4">
-          <div className="flex items-center justify-between text-[12px]">
-            <span className="font-medium text-ink-muted">Completion</span>
-            <span className="tnum font-mono font-semibold text-ink">
-              {completion}%
-            </span>
+        <div className="grid w-full grid-cols-2 gap-3 border-t border-line pt-4 text-center">
+          <div>
+            <p className="tnum font-display text-xl font-extrabold text-ink">
+              {done}
+            </p>
+            <p className="text-[11px] font-semibold text-ink-soft">Done</p>
           </div>
-          <ProgressBar value={completion} />
+          <div>
+            <p className="tnum font-display text-xl font-extrabold text-ink">
+              {open}
+            </p>
+            <p className="text-[11px] font-semibold text-ink-soft">Open</p>
+          </div>
         </div>
       </div>
     </Panel>
@@ -651,6 +701,12 @@ function ThroughputByProject({
         </span>
       }
     >
+      {data.length === 0 ? (
+        <p className="py-10 text-center text-[13px] text-ink-soft">
+          No projects yet.
+        </p>
+      ) : (
+      <>
       <div className="space-y-4">
         {data.map(({ project, segs, total }, i) => {
           const active = hovered === null || hovered === project.id;
@@ -711,6 +767,8 @@ function ThroughputByProject({
           </span>
         ))}
       </div>
+      </>
+      )}
     </Panel>
   );
 }
@@ -866,6 +924,11 @@ function WorkloadLeaderboard({ tasks }: { tasks: Task[] }) {
         </span>
       }
     >
+      {rows.length === 0 ? (
+        <p className="py-10 text-center text-[13px] text-ink-soft">
+          No assigned work yet.
+        </p>
+      ) : (
       <div className="overflow-x-auto">
         <div className="grid grid-cols-[24px_1fr_120px_70px_70px] items-center gap-4 border-b border-line px-1 pb-2.5 text-[11px] font-bold uppercase tracking-wide text-ink-soft">
           <span>#</span>
@@ -905,6 +968,8 @@ function WorkloadLeaderboard({ tasks }: { tasks: Task[] }) {
                   <Avatar
                     initials={row.member.initials}
                     hue={row.member.hue}
+                    seed={row.member.initials}
+                    src={row.member.avatar}
                     size={30}
                   />
                   <div className="min-w-0">
@@ -949,6 +1014,7 @@ function WorkloadLeaderboard({ tasks }: { tasks: Task[] }) {
           })}
         </div>
       </div>
+      )}
     </Panel>
   );
 }

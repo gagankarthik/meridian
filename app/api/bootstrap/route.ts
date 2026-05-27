@@ -29,15 +29,26 @@ export async function GET(request: Request) {
     return Response.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const ctx = await resolveWorkspace(user);
-  if (!ctx) {
-    return Response.json({ needsOnboarding: true }, { status: 200 });
+  let ctx, items, meta;
+  try {
+    ctx = await resolveWorkspace(user);
+    if (!ctx) {
+      return Response.json({ needsOnboarding: true }, { status: 200 });
+    }
+    [items, meta] = await Promise.all([
+      queryPartition(`WS#${ctx.workspaceId}`),
+      getItem(key.wsMeta(ctx.workspaceId)),
+    ]);
+  } catch (err) {
+    // Surface the real cause in server logs (e.g. Amplify CloudWatch). The
+    // most common production failure is missing AWS credentials — set an IAM
+    // role or MERIDIAN_AWS_* env vars (the `AWS_` prefix is reserved on Amplify).
+    console.error("[bootstrap] DynamoDB access failed:", err);
+    return Response.json(
+      { error: "Workspace data unavailable. Check server AWS credentials." },
+      { status: 500 },
+    );
   }
-
-  const [items, meta] = await Promise.all([
-    queryPartition(`WS#${ctx.workspaceId}`),
-    getItem(key.wsMeta(ctx.workspaceId)),
-  ]);
 
   const members: Record<string, unknown>[] = [];
   const projects: Record<string, unknown>[] = [];
