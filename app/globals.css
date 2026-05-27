@@ -1,0 +1,273 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+@import "shadcn/tailwind.css";
+
+@custom-variant dark (&:is(.dark *));
+
+/* ============================================================
+   MERIDIAN — "Atlas Bright" design system
+   Bright white surfaces · deep navy ink · Atlassian-blue accent.
+   Rounded corners · soft navy-tinted shadows · friendly bold type.
+   ============================================================ */
+
+@theme inline {
+  /* Brand surface tokens */
+  --color-paper: var(--paper);
+  --color-paper-raised: var(--paper-raised);
+  --color-sunken: var(--sunken);
+  --color-ink: var(--ink);
+  --color-ink-muted: var(--ink-muted);
+  --color-ink-soft: var(--ink-soft);
+  --color-signal: var(--signal);
+  --color-signal-strong: var(--signal-strong);
+  --color-signal-soft: var(--signal-soft);
+  --color-signal-ink: var(--signal-ink);
+  --color-signal-foreground: var(--signal-foreground);
+  --color-line: var(--line);
+  --color-line-strong: var(--line-strong);
+
+  /* Brand secondary palette (illustrative accents) */
+  --color-grape: var(--grape);
+  --color-teal: var(--teal);
+  --color-green: var(--green);
+  --color-yellow: var(--yellow);
+
+  /* Type system */
+  --font-sans: var(--font-geist);
+  --font-display: var(--font-geist);
+  --font-mono: var(--font-geist-mono);
+
+  /* shadcn / ui token bridge */
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-backdrop: var(--card);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
+  --color-chart-5: var(--chart-5);
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-ring: var(--sidebar-ring);
+
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+  --radius-2xl: calc(var(--radius) + 12px);
+  --radius-3xl: calc(var(--radius) + 24px);
+
+  --animate-marquee: marquee 38s linear infinite;
+  --animate-marquee-slow: marquee 60s linear infinite;
+}
+
+:root {
+  /* Atlas Bright palette */
+  --paper: #ffffff;
+  --paper-raised: #f7f8fa;
+  --sunken: #f1f2f4;
+  --ink: #16171d; /* near-black — headlines */
+  --ink-muted: #565b66; /* body */
+  --ink-soft: #8b909c; /* captions */
+  --signal: #2563eb; /* Atlassian blue */
+  --signal-strong: #1d4ed8; /* hover */
+  --signal-soft: #eaf1ff; /* tinted bg */
+  --signal-ink: #ffffff;
+  --signal-foreground: #ffffff;
+  --line: #dfe1e6;
+  --line-strong: #c1c7d0;
+
+  --grape: #6e5dc6;
+  --teal: #1d9aaa;
+  --green: #22a06b;
+  --yellow: #e2a200;
+
+  --radius: 0.75rem;
+
+  --background: #ffffff;
+  --foreground: #16171d;
+  --card: #ffffff;
+  --card-foreground: #16171d;
+  --popover: #ffffff;
+  --popover-foreground: #16171d;
+  --primary: #2563eb;
+  --primary-foreground: #ffffff;
+  --secondary: #f1f2f4;
+  --secondary-foreground: #16171d;
+  --muted: #f1f2f4;
+  --muted-foreground: #626f86;
+  --accent: #eaf1ff;
+  --accent-foreground: #2563eb;
+  --destructive: #e34935;
+  --border: #dfe1e6;
+  --input: #dfe1e6;
+  --ring: #2563eb;
+
+  --chart-1: #2563eb;
+  --chart-2: #6e5dc6;
+  --chart-3: #1d9aaa;
+  --chart-4: #22a06b;
+  --chart-5: #e2a200;
+
+  /* App nav — light Jira-style rail */
+  --sidebar: #f7f8fa;
+  --sidebar-foreground: #44546f;
+  --sidebar-primary: #2563eb;
+  --sidebar-primary-foreground: #ffffff;
+  --sidebar-accent: #eaf1ff;
+  --sidebar-accent-foreground: #2563eb;
+  --sidebar-border: #e4e6ea;
+  --sidebar-ring: #2563eb;
+}
+
+.dark {
+  --paper: #0b1929;
+  --paper-raised: #11243a;
+  --sunken: #0d1b2c;
+  --ink: #e6edf7;
+  --ink-muted: #9fb0c9;
+  --ink-soft: #7184a0;
+  --line: #1d3151;
+  --line-strong: #2f4a72;
+
+  --background: #0b1929;
+  --foreground: #e6edf7;
+  --card: #11243a;
+  --card-foreground: #e6edf7;
+  --popover: #11243a;
+  --popover-foreground: #e6edf7;
+  --primary: #4c9aff;
+  --primary-foreground: #06121f;
+  --secondary: #16293f;
+  --secondary-foreground: #e6edf7;
+  --muted: #16293f;
+  --muted-foreground: #9fb0c9;
+  --accent: #14304f;
+  --accent-foreground: #4c9aff;
+  --border: #1d3151;
+  --input: #1d3151;
+  --ring: #4c9aff;
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  html {
+    @apply font-sans;
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+    scroll-behavior: smooth;
+  }
+  body {
+    @apply bg-background text-foreground;
+  }
+  ::selection {
+    background: var(--signal-soft);
+    color: var(--signal-strong);
+  }
+  .tnum {
+    font-variant-numeric: tabular-nums;
+  }
+}
+
+/* ---- Soft, navy-tinted elevation (Atlassian-style) -------- */
+@utility shadow-card {
+  box-shadow:
+    0 1px 1px rgba(9, 30, 66, 0.1),
+    0 0 1px rgba(9, 30, 66, 0.13);
+}
+@utility shadow-raised {
+  box-shadow:
+    0 8px 16px -6px rgba(9, 30, 66, 0.18),
+    0 0 1px rgba(9, 30, 66, 0.2);
+}
+@utility shadow-float {
+  box-shadow:
+    0 24px 48px -16px rgba(9, 30, 66, 0.24),
+    0 2px 6px -2px rgba(9, 30, 66, 0.12);
+}
+
+/* Soft brand gradient washes */
+@utility brand-wash {
+  background:
+    radial-gradient(60% 50% at 80% 0%, rgba(37, 99, 235, 0.12), transparent 70%),
+    radial-gradient(55% 55% at 8% 8%, rgba(6, 182, 212, 0.1), transparent 70%);
+}
+@utility brand-gradient {
+  background: linear-gradient(135deg, #2563eb 0%, #3b82f6 52%, #06b6d4 120%);
+}
+
+/* faint dotted field, kept subtle for hero atmosphere */
+@utility bg-dots {
+  background-image: radial-gradient(
+    rgba(9, 30, 66, 0.06) 1px,
+    transparent 1px
+  );
+  background-size: 22px 22px;
+}
+
+@utility text-balance {
+  text-wrap: balance;
+}
+
+/* ---- Keyframes -------------------------------------------- */
+@keyframes marquee {
+  from {
+    transform: translateX(0);
+  }
+  to {
+    transform: translateX(-50%);
+  }
+}
+
+@keyframes float-y {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-10px);
+  }
+}
+
+/* Slim scrollbars */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--line-strong) transparent;
+}
+*::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+*::-webkit-scrollbar-thumb {
+  background: color-mix(in srgb, var(--ink) 18%, transparent);
+  border-radius: 999px;
+  border: 3px solid transparent;
+  background-clip: content-box;
+}
+*::-webkit-scrollbar-thumb:hover {
+  background: color-mix(in srgb, var(--ink) 30%, transparent);
+  background-clip: content-box;
+}
