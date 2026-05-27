@@ -70,34 +70,34 @@ function Person({ id }: { id: string }) {
   if (!m) return <span className="text-ink-soft">—</span>;
   return (
     <span className="flex items-center gap-2">
-      <Avatar initials={m.initials} hue={m.hue} size={24} />
+      <Avatar initials={m.initials} hue={m.hue} seed={m.initials} src={m.avatar} size={24} />
       <span className="truncate text-[13px] text-ink">{m.name}</span>
     </span>
   );
 }
 
 export function ApprovalsClient({ projectId }: { projectId: string }) {
-  const { approvals } = useWorkspace();
+  const { approvals, setApprovalStatus, can } = useWorkspace();
   const items = useMemo(
     () => approvals.filter((a) => a.projectId === projectId),
     [approvals, projectId],
   );
-  const [statuses, setStatuses] = useState<Record<string, ApprovalStatus>>({});
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState<StatusFilter>("all");
   const [view, setView] = useState<ViewMode>("table");
 
+  // Approving/rejecting is a review action and persists through the provider.
+  const canReview = can("edit");
   const set = (id: string, status: ApprovalStatus) =>
-    setStatuses((s) => ({ ...s, [id]: status }));
+    setApprovalStatus(id, status);
 
-  const statusOf = (a: Approval): ApprovalStatus => statuses[a.id] ?? a.status;
+  const statusOf = (a: Approval): ApprovalStatus => a.status;
 
   const counts = useMemo(() => {
     const c = { all: items.length, pending: 0, approved: 0, rejected: 0 };
     for (const a of items) c[statusOf(a)] += 1;
     return c;
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [items, statuses]);
+  }, [items]);
 
   const q = query.trim().toLowerCase();
   const visible = useMemo(
@@ -107,8 +107,7 @@ export function ApprovalsClient({ projectId }: { projectId: string }) {
           (filter === "all" || statusOf(a) === filter) &&
           (!q || a.title.toLowerCase().includes(q)),
       ),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [items, statuses, filter, q],
+    [items, filter, q],
   );
 
   if (items.length === 0) {
@@ -128,6 +127,7 @@ export function ApprovalsClient({ projectId }: { projectId: string }) {
   }
 
   const actions = (a: Approval) => {
+    if (!canReview) return null;
     const status = statusOf(a);
     if (status === "pending") {
       return (

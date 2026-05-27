@@ -1,22 +1,46 @@
 import Link from "next/link";
 import { Wordmark } from "@/components/brand/logo";
 
-const COLUMNS: { title: string; links: string[] }[] = [
+type FooterLink = { label: string; href: string };
+const COLUMNS: { title: string; links: FooterLink[] }[] = [
   {
     title: "Product",
-    links: ["Boards", "Timelines", "Dashboards", "Automations", "Integrations"],
+    links: [
+      { label: "Boards", href: "/#views" },
+      { label: "Timelines", href: "/#views" },
+      { label: "Dashboards", href: "/#views" },
+      { label: "Automations", href: "/#workflow" },
+      { label: "Pricing", href: "/pricing" },
+    ],
   },
   {
     title: "Solutions",
-    links: ["Engineering", "Marketing", "Operations", "Agencies", "Enterprise"],
+    links: [
+      { label: "Engineering", href: "/#workflow" },
+      { label: "Marketing", href: "/#workflow" },
+      { label: "Operations", href: "/#workflow" },
+      { label: "Agencies", href: "/#use-cases" },
+      { label: "Enterprise", href: "/#security" },
+    ],
   },
   {
     title: "Company",
-    links: ["About", "Customers", "Careers", "Newsroom", "Contact"],
+    links: [
+      { label: "About", href: "/#metrics" },
+      { label: "Customers", href: "/#testimonials" },
+      { label: "Contact", href: "mailto:support@meridian.work" },
+      { label: "Sign in", href: "/login" },
+      { label: "Get started", href: "/signup" },
+    ],
   },
   {
     title: "Resources",
-    links: ["Docs", "Changelog", "Status", "Security", "Trust center"],
+    links: [
+      { label: "Security", href: "/#security" },
+      { label: "Pricing", href: "/pricing" },
+      { label: "Help", href: "/app/help" },
+      { label: "Status", href: "/#metrics" },
+    ],
   },
 ];
 
@@ -47,12 +71,12 @@ export function Footer() {
               <h3 className="text-[13px] font-bold text-ink">{col.title}</h3>
               <ul className="mt-4 space-y-2.5">
                 {col.links.map((link) => (
-                  <li key={link}>
+                  <li key={link.label}>
                     <Link
-                      href="#"
+                      href={link.href}
                       className="text-[14px] text-ink-muted transition-colors hover:text-ink"
                     >
-                      {link}
+                      {link.label}
                     </Link>
                   </li>
                 ))}
@@ -67,13 +91,13 @@ export function Footer() {
             that ship.
           </p>
           <div className="flex items-center gap-5 font-mono text-[11px] tracking-wide text-ink-soft">
-            <Link href="#" className="transition-colors hover:text-ink">
+            <Link href="/privacy" className="transition-colors hover:text-ink">
               Privacy
             </Link>
-            <Link href="#" className="transition-colors hover:text-ink">
+            <Link href="/terms" className="transition-colors hover:text-ink">
               Terms
             </Link>
-            <Link href="#" className="transition-colors hover:text-ink">
+            <Link href="/privacy" className="transition-colors hover:text-ink">
               DPA
             </Link>
           </div>

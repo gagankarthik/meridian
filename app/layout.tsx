@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import { ConfigureAmplify } from "@/components/auth/configure-amplify";
+import { CookieConsent } from "@/components/cookie-consent";
 
 const geist = Geist({
   subsets: ["latin"],
@@ -58,6 +59,7 @@ export default function RootLayout({
         />
         <ConfigureAmplify />
         {children}
+        <CookieConsent />
       </body>
     </html>
   );

@@ -72,8 +72,22 @@ export type NewProject = {
 type WorkspaceCtx = {
   loading: boolean;
   me: { id: string; name: string; email: string; role: string };
-  workspace: { id: string; name: string; company?: string; logo?: string };
-  updateWorkspace: (patch: { name?: string; company?: string; logo?: string }) => void;
+  workspace: {
+    id: string;
+    name: string;
+    company?: string;
+    logo?: string;
+    companySize?: string;
+    industry?: string;
+    plan?: string;
+  };
+  updateWorkspace: (patch: {
+    name?: string;
+    company?: string;
+    logo?: string;
+    companySize?: string;
+    industry?: string;
+  }) => void;
   /** Upload a (compact, downscaled) logo data URL; persisted to S3 when live. */
   uploadWorkspaceLogo: (dataUrl: string) => Promise<void>;
   tasks: Task[];
@@ -83,6 +97,13 @@ type WorkspaceCtx = {
   notifications: Notification[];
   approvals: Approval[];
   attachments: Attachment[];
+  setApprovalStatus: (id: string, status: Approval["status"]) => void;
+  markNotificationRead: (id: string) => void;
+  markAllNotificationsRead: () => void;
+  removeMember: (id: string) => void;
+  updateMember: (id: string, patch: Partial<Member>) => void;
+  /** Update the signed-in user's own profile (name / photo) everywhere. */
+  updateProfile: (patch: { name?: string; avatar?: string }) => void;
   addProject: (p: NewProject) => void;
   updateProject: (id: string, patch: Partial<Project>) => void;
   deleteProject: (id: string) => void;
@@ -133,6 +154,9 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
     name: string;
     company?: string;
     logo?: string;
+    companySize?: string;
+    industry?: string;
+    plan?: string;
   }>({ id: "", name: "Meridian" });
   // `loading` only blocks when we're actually fetching live data.
   const [loading, setLoading] = useState<boolean>(cognitoConfigured);
@@ -181,6 +205,9 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
             name: data.workspace.name ?? "Workspace",
             company: data.workspace.company,
             logo: data.workspace.logo,
+            companySize: data.workspace.companySize,
+            industry: data.workspace.industry,
+            plan: data.workspace.plan,
           });
         }
         if (data.me?.id) {
@@ -256,6 +283,59 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
     notifications,
     approvals,
     attachments,
+    setApprovalStatus: (id, status) => {
+      setApprovals((list) =>
+        list.map((a) => (a.id === id ? { ...a, status } : a)),
+      );
+      persist(`/api/approvals/${id}`, {
+        method: "PATCH",
+        body: JSON.stringify({ status }),
+      });
+    },
+    markNotificationRead: (id) => {
+      setNotifications((list) =>
+        list.map((n) => (n.id === id ? { ...n, unread: false } : n)),
+      );
+      persist(`/api/notifications/${id}`, {
+        method: "PATCH",
+        body: JSON.stringify({ unread: false }),
+      });
+    },
+    markAllNotificationsRead: () => {
+      const wasUnread = notifications.filter((n) => n.unread);
+      setNotifications((list) => list.map((n) => ({ ...n, unread: false })));
+      wasUnread.forEach((n) =>
+        persist(`/api/notifications/${n.id}`, {
+          method: "PATCH",
+          body: JSON.stringify({ unread: false }),
+        }),
+      );
+    },
+    removeMember: (id) => {
+      setMembers((ms) => ms.filter((m) => m.id !== id));
+      persist(`/api/members/${id}`, { method: "DELETE" });
+    },
+    updateMember: (id, patch) => {
+      setMembers((ms) => ms.map((m) => (m.id === id ? { ...m, ...patch } : m)));
+      persist(`/api/members/${id}`, {
+        method: "PATCH",
+        body: JSON.stringify(patch),
+      });
+    },
+    updateProfile: (patch) => {
+      // Reflect immediately in the topbar/greeting and the members list…
+      if (patch.name !== undefined) {
+        setMe((m) => ({ ...m, name: patch.name as string }));
+      }
+      setMembers((ms) =>
+        ms.map((m) => (m.id === meId ? { ...m, ...patch } : m)),
+      );
+      // …and persist to this user's own member record.
+      persist(`/api/members/${meId}`, {
+        method: "PATCH",
+        body: JSON.stringify(patch),
+      });
+    },
     addProject: (p) => {
       const project: Project = {
         id: nextId("p"),

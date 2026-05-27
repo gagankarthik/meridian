@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { AnimatePresence, motion } from "motion/react";
 import {
@@ -151,6 +151,39 @@ const stepVariants = {
 export default function OnboardingPage() {
   const router = useRouter();
 
+  // Gate: onboarding is only for a brand-new account with no workspace yet.
+  // Anyone already in a workspace (or not signed in) is redirected away — so
+  // it can't be reached mid-session by typing the URL.
+  const [gate, setGate] = useState<"checking" | "allowed">(
+    cognitoConfigured ? "checking" : "allowed",
+  );
+  useEffect(() => {
+    if (!cognitoConfigured) return; // demo mode — no real workspace to guard
+    let active = true;
+    (async () => {
+      try {
+        const res = await authedFetch("/api/bootstrap");
+        if (!active) return;
+        if (res.status === 401) {
+          router.replace("/login?next=/onboarding");
+          return;
+        }
+        const data = res.ok ? await res.json() : null;
+        if (!active) return;
+        if (data?.demo || data?.needsOnboarding) {
+          setGate("allowed"); // new owner with no workspace → onboard
+        } else {
+          router.replace("/app"); // already has a workspace → not allowed here
+        }
+      } catch {
+        if (active) router.replace("/app");
+      }
+    })();
+    return () => {
+      active = false;
+    };
+  }, [router]);
+
   const [step, setStep] = useState(1);
   const [direction, setDirection] = useState(1);
 
@@ -192,6 +225,8 @@ export default function OnboardingPage() {
           body: JSON.stringify({
             workspaceName: workspaceValue,
             companyName,
+            companySize,
+            industry,
             projectName: projectName.trim(),
             logo: logo ?? undefined,
           }),
@@ -262,6 +297,19 @@ export default function OnboardingPage() {
   const selectedSolutionLabels = SOLUTIONS.filter((s) =>
     solutions.includes(s.id),
   ).map((s) => s.label);
+
+  // While verifying eligibility, show a minimal loading state (prevents the
+  // wizard from flashing for users who'll be redirected to the app).
+  if (gate === "checking") {
+    return (
+      <main className="grid min-h-dvh place-items-center bg-paper-raised">
+        <div className="flex flex-col items-center gap-3 text-ink-soft">
+          <span className="size-7 animate-spin rounded-full border-2 border-line border-t-signal" />
+          <p className="text-[13px] font-medium">Loading…</p>
+        </div>
+      </main>
+    );
+  }
 
   return (
     <main className="relative flex min-h-dvh flex-col items-center justify-center overflow-hidden bg-paper-raised px-4 py-8 sm:py-12">

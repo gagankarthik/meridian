@@ -198,13 +198,15 @@ function ProjectSearchFilter({ projectId }: { projectId: string }) {
   const togglePriority = (p: Priority) =>
     setPriorities((s) => {
       const n = new Set(s);
-      n.has(p) ? n.delete(p) : n.add(p);
+      if (n.has(p)) n.delete(p);
+      else n.add(p);
       return n;
     });
   const toggleStatus = (id: string) =>
     setStatuses((s) => {
       const n = new Set(s);
-      n.has(id) ? n.delete(id) : n.add(id);
+      if (n.has(id)) n.delete(id);
+      else n.add(id);
       return n;
     });
   const clearFilters = () => {

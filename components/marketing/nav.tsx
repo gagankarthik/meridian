@@ -22,7 +22,9 @@ import {
   Workflow,
   X,
 } from "lucide-react";
+import { getCurrentUser } from "aws-amplify/auth";
 import { Wordmark } from "@/components/brand/logo";
+import { cognitoConfigured } from "@/lib/cognito";
 import { cn } from "@/lib/utils";
 
 type MenuItem = { icon: typeof Columns3; label: string; desc: string; href: string };
@@ -60,18 +62,31 @@ const MENUS: { label: string; href?: string; cols?: 1 | 2; items?: MenuItem[] }[
       { icon: Users, label: "Customers", desc: "Stories from teams", href: "#" },
     ],
   },
-  { label: "Pricing", href: "#pricing" },
+  { label: "Pricing", href: "/pricing" },
 ];
 
 export function SiteNav() {
   const [scrolled, setScrolled] = useState(false);
   const [open, setOpen] = useState(false);
+  const [signedIn, setSignedIn] = useState(false);
 
   useEffect(() => {
     const onScroll = () => setScrolled(window.scrollY > 16);
     onScroll();
     window.addEventListener("scroll", onScroll, { passive: true });
     return () => window.removeEventListener("scroll", onScroll);
+  }, []);
+
+  // Reflect auth state so returning users jump straight to their dashboard.
+  useEffect(() => {
+    if (!cognitoConfigured) return;
+    let active = true;
+    getCurrentUser()
+      .then(() => active && setSignedIn(true))
+      .catch(() => active && setSignedIn(false));
+    return () => {
+      active = false;
+    };
   }, []);
 
   return (
@@ -104,19 +119,31 @@ export function SiteNav() {
         </nav>
 
         <div className="hidden items-center gap-2 md:flex">
-          <Link
-            href="/app"
-            className="px-3 py-2 text-[14px] font-medium text-ink-muted transition-colors hover:text-ink"
-          >
-            Sign in
-          </Link>
-          <Link
-            href="/app"
-            className="group inline-flex items-center gap-1.5 rounded-xl bg-signal px-4 py-2 text-[14px] font-bold text-white shadow-card transition-colors hover:bg-signal-strong"
-          >
-            Get started free
-            <ArrowRight className="size-3.5 transition-transform group-hover:translate-x-0.5" />
-          </Link>
+          {signedIn ? (
+            <Link
+              href="/app"
+              className="group inline-flex items-center gap-1.5 rounded-xl bg-signal px-4 py-2 text-[14px] font-bold text-white shadow-card transition-colors hover:bg-signal-strong"
+            >
+              Go to dashboard
+              <ArrowRight className="size-3.5 transition-transform group-hover:translate-x-0.5" />
+            </Link>
+          ) : (
+            <>
+              <Link
+                href="/login"
+                className="px-3 py-2 text-[14px] font-medium text-ink-muted transition-colors hover:text-ink"
+              >
+                Sign in
+              </Link>
+              <Link
+                href="/signup"
+                className="group inline-flex items-center gap-1.5 rounded-xl bg-signal px-4 py-2 text-[14px] font-bold text-white shadow-card transition-colors hover:bg-signal-strong"
+              >
+                Get started free
+                <ArrowRight className="size-3.5 transition-transform group-hover:translate-x-0.5" />
+              </Link>
+            </>
+          )}
         </div>
 
         <button
@@ -160,18 +187,29 @@ export function SiteNav() {
             </div>
           ))}
           <div className="mt-4 flex gap-2">
-            <Link
-              href="/app"
-              className="flex-1 rounded-xl border border-line py-2.5 text-center text-sm font-semibold"
-            >
-              Sign in
-            </Link>
-            <Link
-              href="/app"
-              className="flex-1 rounded-xl bg-signal py-2.5 text-center text-sm font-bold text-white"
-            >
-              Get started free
-            </Link>
+            {signedIn ? (
+              <Link
+                href="/app"
+                className="flex-1 rounded-xl bg-signal py-2.5 text-center text-sm font-bold text-white"
+              >
+                Go to dashboard
+              </Link>
+            ) : (
+              <>
+                <Link
+                  href="/login"
+                  className="flex-1 rounded-xl border border-line py-2.5 text-center text-sm font-semibold"
+                >
+                  Sign in
+                </Link>
+                <Link
+                  href="/signup"
+                  className="flex-1 rounded-xl bg-signal py-2.5 text-center text-sm font-bold text-white"
+                >
+                  Get started free
+                </Link>
+              </>
+            )}
           </div>
         </div>
       )}

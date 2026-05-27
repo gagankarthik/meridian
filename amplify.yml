@@ -1,0 +1,50 @@
+# AWS Amplify Hosting build settings for the Meridian Next.js app.
+# Amplify auto-detects Next.js (App Router) and provisions SSR compute for the
+# route handlers + proxy.
+#
+# ── Environment variables ──────────────────────────────────────────────────
+# Set ALL of these in the Amplify console (App settings → Environment
+# variables) for each branch/environment. The preBuild step below writes the
+# PUBLIC (NEXT_PUBLIC_*) ones into .env.production so Next.js inlines them at
+# build time. The SECRET AWS_* keys are intentionally NOT written to any file
+# or inlined — the AWS SDK reads them from the SSR runtime environment, and
+# they must never reach the browser bundle.
+#
+#   NEXT_PUBLIC_AWS_REGION                  e.g. us-east-2
+#   NEXT_PUBLIC_COGNITO_USER_POOL_ID
+#   NEXT_PUBLIC_COGNITO_USER_POOL_CLIENT_ID
+#   NEXT_PUBLIC_AWS_DYNAMODB_TABLE_NAME     e.g. meridian-dev
+#   NEXT_PUBLIC_AWS_S3_BUCKET
+#   AWS_ACCESS_KEY_ID        (SECRET — runtime only, never NEXT_PUBLIC_)
+#   AWS_SECRET_ACCESS_KEY    (SECRET — runtime only, never NEXT_PUBLIC_)
+#
+# Prefer an Amplify service/compute role with scoped DynamoDB/S3/Cognito
+# permissions over static keys; the SDK picks the role up automatically and
+# you can omit AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY entirely.
+version: 1
+frontend:
+  phases:
+    preBuild:
+      commands:
+        - npm ci --cache .npm --prefer-offline
+        # Make public config available to the build (values come from the
+        # Amplify console env). Secret AWS_* keys are deliberately excluded.
+        - |
+          {
+            echo "NEXT_PUBLIC_AWS_REGION=$NEXT_PUBLIC_AWS_REGION"
+            echo "NEXT_PUBLIC_COGNITO_USER_POOL_ID=$NEXT_PUBLIC_COGNITO_USER_POOL_ID"
+            echo "NEXT_PUBLIC_COGNITO_USER_POOL_CLIENT_ID=$NEXT_PUBLIC_COGNITO_USER_POOL_CLIENT_ID"
+            echo "NEXT_PUBLIC_AWS_DYNAMODB_TABLE_NAME=$NEXT_PUBLIC_AWS_DYNAMODB_TABLE_NAME"
+            echo "NEXT_PUBLIC_AWS_S3_BUCKET=$NEXT_PUBLIC_AWS_S3_BUCKET"
+          } >> .env.production
+    build:
+      commands:
+        - npm run build
+  artifacts:
+    baseDirectory: .next
+    files:
+      - "**/*"
+  cache:
+    paths:
+      - .next/cache/**/*
+      - .npm/**/*

@@ -19,6 +19,7 @@ import { MeridianMark } from "@/components/brand/logo";
 import { CURRENT_PROJECT_ID } from "@/lib/app-data";
 import { useWorkspace } from "@/components/app/workspace";
 import { CreateProjectDialog } from "@/components/app/create-project";
+import { projectHref, useDefaultProjectView } from "@/lib/preferences";
 import { cn } from "@/lib/utils";
 
 const MENU = [
@@ -59,6 +60,7 @@ export function AppSidebar({
   const [showProjects, setShowProjects] = useState(true);
   const activeProject = params.get("project") ?? CURRENT_PROJECT_ID;
   const onProjectView = VIEW_PATHS.some((p) => pathname.startsWith(p));
+  const defaultView = useDefaultProjectView();
 
   return (
     <aside
@@ -148,7 +150,7 @@ export function AppSidebar({
             return (
               <Link
                 key={p.id}
-                href={`/app/summary?project=${p.id}`}
+                href={projectHref(defaultView, p.id)}
                 title={p.name}
                 onClick={onNavigate}
                 className={cn(

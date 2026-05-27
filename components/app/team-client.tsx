@@ -175,11 +175,13 @@ export function TeamClient() {
 
   function setMemberRole(id: string, r: Role) {
     setMembers((ms) => ms.map((m) => (m.id === id ? { ...m, role: r } : m)));
+    ws.updateMember(id, { role: r }); // persist
     setMenuId(null);
     flash(`Role updated to ${r}`);
   }
   function removeMember(m: Member) {
     setMembers((ms) => ms.filter((x) => x.id !== m.id));
+    ws.removeMember(m.id); // persist the removal so it sticks on reload
     flash(`Removed ${m.name}`);
   }
   function openAccessDialog(m: Member) {
@@ -201,6 +203,7 @@ export function TeamClient() {
     setMembers((ms) =>
       ms.map((x) => (x.id === target.id ? { ...x, projects: next } : x)),
     );
+    ws.updateMember(target.id, { projects: next }); // persist
     flash(`Updated access for ${target.name}`);
     setAccessMember(null);
   }

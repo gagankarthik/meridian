@@ -18,6 +18,7 @@ import {
 import { Avatar } from "@/components/app/widgets";
 import { useWorkspace } from "@/components/app/workspace";
 import { cognitoConfigured } from "@/lib/cognito";
+import { projectHref, useDefaultProjectView } from "@/lib/preferences";
 import { cn } from "@/lib/utils";
 
 export function AppTopbar({
@@ -38,7 +39,7 @@ export function AppTopbar({
 
       {/* org logo + name (left end) */}
       <div className="flex min-w-0 items-center gap-3">
-        <span className="grid size-11 shrink-0 place-items-center overflow-hidden rounded-xl border border-line-strong bg-card text-[15px] font-bold text-ink shadow-card">
+        <span className="grid size-11 shrink-0 place-items-center overflow-hidden bg-card text-[15px] font-bold text-ink">
           {workspace.logo ? (
             // eslint-disable-next-line @next/next/no-img-element
             <img src={workspace.logo} alt="" className="size-full object-cover" />
@@ -67,6 +68,7 @@ export function AppTopbar({
 /* ----------------------------- Search ----------------------------- */
 function SearchBar() {
   const ws = useWorkspace();
+  const defaultView = useDefaultProjectView();
   const [q, setQ] = useState("");
   const [open, setOpen] = useState(false);
   const query = q.trim().toLowerCase();
@@ -125,7 +127,7 @@ function SearchBar() {
             {projResults.map((p) => (
               <Link
                 key={p.id}
-                href={`/app/summary?project=${p.id}`}
+                href={projectHref(defaultView, p.id)}
                 onClick={() => {
                   setOpen(false);
                   setQ("");
@@ -167,7 +169,8 @@ function SearchBar() {
 /* -------------------------- Notifications -------------------------- */
 function Notifications() {
   const [open, setOpen] = useState(false);
-  const { notifications } = useWorkspace();
+  const { notifications, members, markNotificationRead, markAllNotificationsRead } =
+    useWorkspace();
   const unread = notifications.filter((n) => n.unread).length;
 
   return (
@@ -194,9 +197,15 @@ function Notifications() {
           <div className="absolute right-0 top-full z-[80] mt-2 w-80 max-w-[calc(100vw-1.5rem)] overflow-hidden rounded-xl border border-line bg-popover shadow-float">
             <div className="flex items-center justify-between border-b border-line px-4 py-2.5">
               <span className="text-[13px] font-bold text-ink">Notifications</span>
-              <button className="text-[12px] font-semibold text-signal hover:underline">
-                Mark all read
-              </button>
+              {unread > 0 && (
+                <button
+                  type="button"
+                  onClick={() => markAllNotificationsRead()}
+                  className="text-[12px] font-semibold text-signal hover:underline"
+                >
+                  Mark all read
+                </button>
+              )}
             </div>
             <div className="max-h-96 divide-y divide-line overflow-y-auto">
               {notifications.length === 0 && (
@@ -204,26 +213,37 @@ function Notifications() {
                   You&apos;re all caught up.
                 </p>
               )}
-              {notifications.map((n) => (
-                <div
-                  key={n.id}
-                  className={cn(
-                    "flex gap-3 px-4 py-3 transition-colors hover:bg-paper-raised",
-                    n.unread && "bg-signal-soft/40",
-                  )}
-                >
-                  <Avatar initials={n.initials} hue={n.hue} size={30} />
-                  <div className="min-w-0 flex-1">
-                    <p className="text-[13px] leading-snug text-ink">
-                      <span className="font-semibold">{n.who}</span> {n.text}
-                    </p>
-                    <span className="text-[11px] text-ink-soft">{n.time} ago</span>
-                  </div>
-                  {n.unread && (
-                    <span className="mt-1.5 size-2 shrink-0 rounded-full bg-signal" />
-                  )}
-                </div>
-              ))}
+              {notifications.map((n) => {
+                const m = members.find((mem) => mem.name === n.who);
+                return (
+                  <button
+                    key={n.id}
+                    type="button"
+                    onClick={() => n.unread && markNotificationRead(n.id)}
+                    className={cn(
+                      "flex w-full gap-3 px-4 py-3 text-left transition-colors hover:bg-paper-raised",
+                      n.unread && "bg-signal-soft/40",
+                    )}
+                  >
+                    <Avatar
+                      initials={n.initials}
+                      hue={n.hue}
+                      seed={m?.initials ?? n.initials}
+                      src={m?.avatar}
+                      size={30}
+                    />
+                    <div className="min-w-0 flex-1">
+                      <p className="text-[13px] leading-snug text-ink">
+                        <span className="font-semibold">{n.who}</span> {n.text}
+                      </p>
+                      <span className="text-[11px] text-ink-soft">{n.time} ago</span>
+                    </div>
+                    {n.unread && (
+                      <span className="mt-1.5 size-2 shrink-0 rounded-full bg-signal" />
+                    )}
+                  </button>
+                );
+              })}
             </div>
           </div>
         </>
@@ -290,7 +310,7 @@ function ProfileMenu() {
             <div className="p-1.5">
               <MenuLink href="/app/profile" icon={User} label="Profile" onClick={() => setOpen(false)} />
               <MenuLink href="/app/settings" icon={Settings} label="Settings" onClick={() => setOpen(false)} />
-              <MenuLink href="/app/settings" icon={LifeBuoy} label="Help" onClick={() => setOpen(false)} />
+              <MenuLink href="/app/help" icon={LifeBuoy} label="Help" onClick={() => setOpen(false)} />
             </div>
             <div className="border-t border-line p-1.5">
               <button

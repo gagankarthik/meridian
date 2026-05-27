@@ -21,6 +21,10 @@ import { cn } from "@/lib/utils";
 
 const ADMIN_ROLES = new Set(["Owner", "Admin", "owner", "admin"]);
 
+// Mirror the onboarding wizard so Settings shows the same options.
+const COMPANY_SIZES = ["1-10", "11-50", "51-200", "201-1000", "1000+"];
+const INDUSTRIES = ["Software", "Marketing/Agency", "IT/Operations", "Finance", "Other"];
+
 function Row({
   title,
   desc,
@@ -33,14 +37,14 @@ function Row({
   children: React.ReactNode;
 }) {
   return (
-    <div className="flex items-center justify-between gap-4 py-3.5">
+    <div className="flex flex-col items-start gap-2 py-3.5 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
       <div className="min-w-0">
         <Label htmlFor={htmlFor} className="text-[14px] font-semibold text-ink">
           {title}
         </Label>
         <p className="mt-0.5 text-[12.5px] text-ink-soft">{desc}</p>
       </div>
-      {children}
+      <div className="w-full sm:w-auto">{children}</div>
     </div>
   );
 }
@@ -83,8 +87,28 @@ export default function SettingsPage() {
   // Organisation (admin only)
   const [orgName, setOrgName] = useState(ws.workspace.name);
   const [company, setCompany] = useState(ws.workspace.company ?? "");
+  const [companySize, setCompanySize] = useState(
+    ws.workspace.companySize || COMPANY_SIZES[1],
+  );
+  const [industry, setIndustry] = useState(
+    ws.workspace.industry || INDUSTRIES[0],
+  );
   const [savedOrg, setSavedOrg] = useState(false);
   const logoRef = useRef<HTMLInputElement>(null);
+
+  // Keep the org fields in sync with the workspace as it loads / updates, so
+  // the saved organisation name and company always show their real values.
+  useEffect(() => {
+    setOrgName(ws.workspace.name);
+    setCompany(ws.workspace.company ?? "");
+    if (ws.workspace.companySize) setCompanySize(ws.workspace.companySize);
+    if (ws.workspace.industry) setIndustry(ws.workspace.industry);
+  }, [
+    ws.workspace.name,
+    ws.workspace.company,
+    ws.workspace.companySize,
+    ws.workspace.industry,
+  ]);
 
   async function onLogo(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
@@ -94,7 +118,12 @@ export default function SettingsPage() {
   }
 
   function saveOrg() {
-    ws.updateWorkspace({ name: orgName.trim() || "Workspace", company: company.trim() });
+    ws.updateWorkspace({
+      name: orgName.trim() || "Workspace",
+      company: company.trim(),
+      companySize,
+      industry,
+    });
     setSavedOrg(true);
     setTimeout(() => setSavedOrg(false), 2400);
   }
@@ -224,7 +253,7 @@ export default function SettingsPage() {
                   id="org-name"
                   value={orgName}
                   onChange={(e) => setOrgName(e.target.value)}
-                  className="h-9 w-56 rounded-xl"
+                  className="h-9 w-full rounded-xl sm:w-56"
                 />
               </Row>
               <Row htmlFor="org-company" title="Company" desc="Legal or trading name.">
@@ -233,12 +262,40 @@ export default function SettingsPage() {
                   value={company}
                   onChange={(e) => setCompany(e.target.value)}
                   placeholder="Acme Inc."
-                  className="h-9 w-56 rounded-xl"
+                  className="h-9 w-full rounded-xl sm:w-56"
                 />
               </Row>
-              <Row title="Plan" desc="Business — billed annually.">
+              <Row htmlFor="org-size" title="Company size" desc="Number of people.">
+                <select
+                  id="org-size"
+                  value={companySize}
+                  onChange={(e) => setCompanySize(e.target.value)}
+                  className="h-9 w-full rounded-xl border border-line bg-paper-raised px-3 text-[13px] font-medium text-ink outline-none focus:border-signal/40 sm:w-56"
+                >
+                  {COMPANY_SIZES.map((s) => (
+                    <option key={s} value={s}>
+                      {s}
+                    </option>
+                  ))}
+                </select>
+              </Row>
+              <Row htmlFor="org-industry" title="Industry" desc="What your team does.">
+                <select
+                  id="org-industry"
+                  value={industry}
+                  onChange={(e) => setIndustry(e.target.value)}
+                  className="h-9 w-full rounded-xl border border-line bg-paper-raised px-3 text-[13px] font-medium text-ink outline-none focus:border-signal/40 sm:w-56"
+                >
+                  {INDUSTRIES.map((s) => (
+                    <option key={s} value={s}>
+                      {s}
+                    </option>
+                  ))}
+                </select>
+              </Row>
+              <Row title="Plan" desc="Billed annually.">
                 <span className="rounded-md bg-signal-soft px-2.5 py-1 text-[12px] font-bold text-signal">
-                  Business
+                  {ws.workspace.plan || "Business"}
                 </span>
               </Row>
             </div>
@@ -278,6 +335,20 @@ export default function SettingsPage() {
               <Row title="Company" desc="Registered company name.">
                 <span className="text-[13px] font-medium text-ink">
                   {ws.workspace.company}
+                </span>
+              </Row>
+            ) : null}
+            {ws.workspace.companySize ? (
+              <Row title="Company size" desc="Number of people.">
+                <span className="text-[13px] font-medium text-ink">
+                  {ws.workspace.companySize}
+                </span>
+              </Row>
+            ) : null}
+            {ws.workspace.industry ? (
+              <Row title="Industry" desc="What your team does.">
+                <span className="text-[13px] font-medium text-ink">
+                  {ws.workspace.industry}
                 </span>
               </Row>
             ) : null}

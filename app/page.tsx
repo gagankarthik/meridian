@@ -8,7 +8,6 @@ import { Views } from "@/components/marketing/views";
 import { Metrics } from "@/components/marketing/metrics";
 import { Testimonials } from "@/components/marketing/testimonials";
 import { Security } from "@/components/marketing/security";
-import { Pricing } from "@/components/marketing/pricing";
 import { CTA } from "@/components/marketing/cta";
 import { Footer } from "@/components/marketing/footer";
 
@@ -26,7 +25,6 @@ export default function Home() {
         <Metrics />
         <Testimonials />
         <Security />
-        <Pricing />
         <CTA />
       </main>
       <Footer />

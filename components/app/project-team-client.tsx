@@ -2,6 +2,7 @@
 
 import type { KeyboardEvent } from "react";
 import { useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
 import {
   Check,
   Crown,
@@ -28,6 +29,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { ConfirmDialog } from "@/components/app/confirm-dialog";
 import { Avatar } from "@/components/app/widgets";
 import { useWorkspace } from "@/components/app/workspace";
 import { authedFetch } from "@/lib/api-client";
@@ -56,8 +58,15 @@ function nameFromEmail(email: string) {
 
 export function ProjectTeamClient({ projectId }: { projectId: string }) {
   const ws = useWorkspace();
+  const router = useRouter();
   const [search, setSearch] = useState("");
   const [menuId, setMenuId] = useState<string | null>(null);
+  const [roleFilter, setRoleFilter] = useState<"all" | ProjectRole>("all");
+  const [reassignFor, setReassignFor] = useState<Member | null>(null);
+  const [removeFor, setRemoveFor] = useState<Member | null>(null);
+
+  // Only admins (or those who can manage) change roles / remove members.
+  const canManage = ws.can("manage");
 
   // Project-scoped invites (local; augments the derived member list).
   const [inviteOpen, setInviteOpen] = useState(false);
@@ -99,13 +108,60 @@ export function ProjectTeamClient({ projectId }: { projectId: string }) {
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
-    if (!q) return allRows;
-    return allRows.filter(
-      (r) =>
+    return allRows.filter((r) => {
+      if (roleFilter !== "all" && r.role !== roleFilter) return false;
+      if (!q) return true;
+      return (
         r.member.name.toLowerCase().includes(q) ||
-        r.member.email.toLowerCase().includes(q),
+        r.member.email.toLowerCase().includes(q)
+      );
+    });
+  }, [allRows, search, roleFilter]);
+
+  /* ---- member actions (admin-gated where destructive) ---- */
+  function setMemberRole(memberId: string, role: ProjectRole) {
+    if (!project) return;
+    const leadIds = project.leadIds.filter((x) => x !== memberId);
+    const reviewerIds = project.reviewerIds.filter((x) => x !== memberId);
+    const memberIds = Array.from(new Set([...project.memberIds, memberId]));
+    if (role === "Lead") leadIds.push(memberId);
+    if (role === "Reviewer") reviewerIds.push(memberId);
+    ws.updateProject(project.id, { leadIds, reviewerIds, memberIds });
+    // Keep any local invite row in sync so the badge updates immediately.
+    setInvites((list) =>
+      list.map((iv) =>
+        iv.member.id === memberId ? { ...iv, role } : iv,
+      ),
     );
-  }, [allRows, search]);
+    setMenuId(null);
+  }
+
+  function removeFromProject(memberId: string) {
+    if (project) {
+      ws.updateProject(project.id, {
+        leadIds: project.leadIds.filter((x) => x !== memberId),
+        reviewerIds: project.reviewerIds.filter((x) => x !== memberId),
+        memberIds: project.memberIds.filter((x) => x !== memberId),
+      });
+    }
+    setInvites((list) => list.filter((iv) => iv.member.id !== memberId));
+    setRemoveFor(null);
+  }
+
+  function reassignTasks(fromId: string, toId: string) {
+    ws.tasks
+      .filter((t) => t.projectId === projectId && t.assigneeIds.includes(fromId))
+      .forEach((t) => {
+        const next = Array.from(
+          new Set(t.assigneeIds.map((x) => (x === fromId ? toId : x))),
+        );
+        ws.updateTask(t.id, { assigneeIds: next, assigneeId: next[0] ?? toId });
+      });
+    flash(
+      `Reassigned tasks from ${memberById(fromId)?.name ?? "member"} to ${memberById(toId)?.name ?? "member"}`,
+    );
+    setReassignFor(null);
+  }
 
   function flash(msg: string) {
     setToast(msg);
@@ -215,13 +271,15 @@ export function ProjectTeamClient({ projectId }: { projectId: string }) {
             Team
           </h1>
         </div>
-        <button
-          onClick={() => setInviteOpen(true)}
-          className="inline-flex items-center gap-2 rounded-xl bg-signal px-4 py-2.5 text-[13px] font-bold text-white transition-colors hover:bg-signal-strong"
-        >
-          <UserPlus className="size-4" />
-          Invite member
-        </button>
+        {canManage && (
+          <button
+            onClick={() => setInviteOpen(true)}
+            className="inline-flex items-center gap-2 rounded-xl bg-signal px-4 py-2.5 text-[13px] font-bold text-white transition-colors hover:bg-signal-strong"
+          >
+            <UserPlus className="size-4" />
+            Invite member
+          </button>
+        )}
       </div>
 
       {/* stats */}
@@ -246,20 +304,39 @@ export function ProjectTeamClient({ projectId }: { projectId: string }) {
         />
       </div>
 
-      {/* search */}
-      <div className="flex items-center gap-2 rounded-xl border border-line bg-card px-3.5 py-2.5 shadow-card focus-within:border-signal/40">
-        <Search className="size-4 shrink-0 text-ink-soft" />
-        <input
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          placeholder="Search members by name or email…"
-          className="w-full bg-transparent text-[14px] text-ink outline-none placeholder:text-ink-soft"
-        />
-        {search && (
-          <span className="tnum shrink-0 text-[12px] text-ink-soft">
-            {filtered.length} of {allRows.length}
-          </span>
-        )}
+      {/* search + role filter */}
+      <div className="flex flex-col gap-2.5 sm:flex-row sm:items-center">
+        <div className="flex flex-1 items-center gap-2 rounded-xl border border-line bg-card px-3.5 py-2.5 shadow-card focus-within:border-signal/40">
+          <Search className="size-4 shrink-0 text-ink-soft" />
+          <input
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Search members by name or email…"
+            className="w-full bg-transparent text-[14px] text-ink outline-none placeholder:text-ink-soft"
+          />
+          {(search || roleFilter !== "all") && (
+            <span className="tnum shrink-0 text-[12px] text-ink-soft">
+              {filtered.length} of {allRows.length}
+            </span>
+          )}
+        </div>
+        <div className="flex shrink-0 gap-1 rounded-xl border border-line bg-card p-1 shadow-card">
+          {(["all", "Lead", "Reviewer", "Member"] as const).map((r) => (
+            <button
+              key={r}
+              type="button"
+              onClick={() => setRoleFilter(r)}
+              className={cn(
+                "rounded-lg px-2.5 py-1.5 text-[12.5px] font-semibold capitalize transition-colors",
+                roleFilter === r
+                  ? "bg-signal text-white"
+                  : "text-ink-muted hover:text-ink",
+              )}
+            >
+              {r === "all" ? "All" : r}
+            </button>
+          ))}
+        </div>
       </div>
 
       {/* table */}
@@ -283,7 +360,7 @@ export function ProjectTeamClient({ projectId }: { projectId: string }) {
                 className="grid grid-cols-[1fr_auto] items-center gap-4 px-5 py-3.5 transition-colors hover:bg-paper-raised sm:grid-cols-[1fr_140px_140px_90px_44px]"
               >
                 <div className="flex min-w-0 items-center gap-3">
-                  <Avatar initials={m.initials} hue={m.hue} size={34} />
+                  <Avatar initials={m.initials} hue={m.hue} seed={m.initials} src={m.avatar} size={34} />
                   <div className="min-w-0">
                     <p className="flex items-center gap-1.5 text-[14px] font-semibold text-ink">
                       <span className="truncate">{m.name}</span>
@@ -332,12 +409,47 @@ export function ProjectTeamClient({ projectId }: { projectId: string }) {
                         onClick={() => setMenuId(null)}
                         className="fixed inset-0 z-40 cursor-default"
                       />
-                      <div className="absolute right-0 top-full z-50 mt-1 w-48 overflow-hidden rounded-xl border border-line bg-popover py-1.5 shadow-float">
-                        <MenuItem label="View profile" />
-                        <MenuItem label="Reassign tasks" />
-                        <MenuItem label="Change project role" />
-                        <div className="my-1.5 border-t border-line" />
-                        <MenuItem label="Remove from project" danger />
+                      <div className="absolute right-0 top-full z-50 mt-1 w-52 overflow-hidden rounded-xl border border-line bg-popover py-1.5 shadow-float">
+                        <MenuItem
+                          label="View profile"
+                          onClick={() => {
+                            setMenuId(null);
+                            router.push(`/app/team/${m.id}`);
+                          }}
+                        />
+                        {ws.can("assign") && (
+                          <MenuItem
+                            label="Reassign tasks"
+                            onClick={() => {
+                              setMenuId(null);
+                              setReassignFor(m);
+                            }}
+                          />
+                        )}
+                        {canManage && (
+                          <>
+                            <div className="my-1.5 border-t border-line" />
+                            <p className="px-3 pb-1 text-[10px] font-bold uppercase tracking-wide text-ink-soft">
+                              Set project role
+                            </p>
+                            {PROJECT_ROLES.filter((r) => r !== role).map((r) => (
+                              <MenuItem
+                                key={r}
+                                label={`Make ${r}`}
+                                onClick={() => setMemberRole(m.id, r)}
+                              />
+                            ))}
+                            <div className="my-1.5 border-t border-line" />
+                            <MenuItem
+                              label="Remove from project"
+                              danger
+                              onClick={() => {
+                                setMenuId(null);
+                                setRemoveFor(m);
+                              }}
+                            />
+                          </>
+                        )}
                       </div>
                     </>
                   )}
@@ -484,6 +596,60 @@ export function ProjectTeamClient({ projectId }: { projectId: string }) {
         </DialogContent>
       </Dialog>
 
+      {/* reassign tasks dialog */}
+      <Dialog
+        open={!!reassignFor}
+        onOpenChange={(o) => !o && setReassignFor(null)}
+      >
+        <DialogContent className="rounded-2xl sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="font-display text-lg font-bold tracking-tight">
+              Reassign tasks
+            </DialogTitle>
+            <DialogDescription>
+              Move {reassignFor?.name}&apos;s tasks in {project?.name ?? "this project"} to
+              another member.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="max-h-72 space-y-0.5 overflow-y-auto py-1">
+            {allRows
+              .filter((r) => r.member.id !== reassignFor?.id)
+              .map(({ member: m }) => (
+                <button
+                  key={m.id}
+                  type="button"
+                  onClick={() =>
+                    reassignFor && reassignTasks(reassignFor.id, m.id)
+                  }
+                  className="flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-left transition-colors hover:bg-secondary"
+                >
+                  <Avatar initials={m.initials} hue={m.hue} seed={m.initials} src={m.avatar} size={26} />
+                  <span className="min-w-0 flex-1 truncate text-[13.5px] font-medium text-ink">
+                    {m.name}
+                  </span>
+                  <span className="text-[11px] text-ink-soft">{m.email}</span>
+                </button>
+              ))}
+            {allRows.filter((r) => r.member.id !== reassignFor?.id).length === 0 && (
+              <p className="px-2.5 py-6 text-center text-[13px] text-ink-soft">
+                No other members to reassign to.
+              </p>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* remove from project confirm */}
+      <ConfirmDialog
+        open={!!removeFor}
+        title="Remove from project?"
+        description={`${removeFor?.name ?? "This member"} will lose access to ${project?.name ?? "this project"}. Their tasks stay, but you may want to reassign them first.`}
+        confirmLabel="Remove"
+        danger
+        onConfirm={() => removeFor && removeFromProject(removeFor.id)}
+        onClose={() => setRemoveFor(null)}
+      />
+
       {toast && (
         <div className="fixed bottom-6 left-1/2 z-[70] flex -translate-x-1/2 items-center gap-2.5 rounded-xl bg-ink px-4 py-3 text-[13px] font-medium text-white shadow-float">
           <span className="grid size-5 place-items-center rounded-full bg-signal text-white">
@@ -520,13 +686,23 @@ function StatTile({
   );
 }
 
-function MenuItem({ label, danger }: { label: string; danger?: boolean }) {
+function MenuItem({
+  label,
+  danger,
+  onClick,
+}: {
+  label: string;
+  danger?: boolean;
+  onClick?: () => void;
+}) {
   return (
     <button
+      type="button"
+      onClick={onClick}
       className={cn(
-        "flex w-full items-center px-3 py-2 text-[13px] font-medium transition-colors",
+        "flex w-full items-center px-3 py-2 text-left text-[13px] font-medium transition-colors",
         danger
-          ? "text-red-600 hover:bg-red-50"
+          ? "text-red-600 hover:bg-red-500/10"
           : "text-ink-muted hover:bg-secondary hover:text-ink",
       )}
     >

@@ -44,6 +44,8 @@ export const key = {
   project: (wid: string, pid: string) => ({ PK: `WS#${wid}`, SK: `PROJECT#${pid}` }),
   task: (wid: string, tid: string) => ({ PK: `WS#${wid}`, SK: `TASK#${tid}` }),
   column: (wid: string, cid: string) => ({ PK: `WS#${wid}`, SK: `COLUMN#${cid}` }),
+  approval: (wid: string, aid: string) => ({ PK: `WS#${wid}`, SK: `APPROVAL#${aid}` }),
+  notification: (wid: string, nid: string) => ({ PK: `WS#${wid}`, SK: `NOTIF#${nid}` }),
 };
 
 export type Item = Record<string, unknown>;

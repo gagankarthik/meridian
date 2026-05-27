@@ -1,9 +1,12 @@
 "use client";
 
 import { useRef, useState } from "react";
+import { updateUserAttributes } from "aws-amplify/auth";
 import { Camera, Check } from "lucide-react";
 import { Avatar } from "@/components/app/widgets";
 import { useWorkspace } from "@/components/app/workspace";
+import { cognitoConfigured } from "@/lib/cognito";
+import { downscaleImage } from "@/lib/image";
 
 export default function ProfilePage() {
   const ws = useWorkspace();
@@ -23,16 +26,29 @@ export default function ProfilePage() {
   const [bio, setBio] = useState(
     "Leading delivery across the Meridian portfolio. Coffee, roadmaps, and shipping on time.",
   );
-  const [photo, setPhoto] = useState<string | null>(null);
+  // Existing saved photo (if any) shows until a new one is picked.
+  const [photo, setPhoto] = useState<string | null>(record?.avatar ?? null);
   const fileRef = useRef<HTMLInputElement>(null);
   const [saved, setSaved] = useState(false);
 
-  function onPhoto(e: React.ChangeEvent<HTMLInputElement>) {
+  async function onPhoto(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
-    if (file) setPhoto(URL.createObjectURL(file));
+    if (!file) return;
+    // Downscale to a compact data URL so the avatar persists cleanly.
+    setPhoto(await downscaleImage(file, 160));
   }
 
   function save() {
+    ws.updateProfile({
+      name: name.trim() || me.name,
+      ...(photo ? { avatar: photo } : {}),
+    });
+    // Keep the Cognito name attribute in sync (best-effort).
+    if (cognitoConfigured && name.trim()) {
+      void updateUserAttributes({
+        userAttributes: { name: name.trim() },
+      }).catch(() => {});
+    }
     setSaved(true);
     setTimeout(() => setSaved(false), 2400);
   }
@@ -53,7 +69,7 @@ export default function ProfilePage() {
               <Avatar
                 initials={me.initials}
                 hue={me.hue}
-                seed={me.name}
+                seed={me.initials}
                 src={photo ?? undefined}
                 size={72}
               />

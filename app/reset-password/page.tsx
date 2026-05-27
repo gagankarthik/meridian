@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { confirmResetPassword, confirmSignIn } from "aws-amplify/auth";
-import { ArrowRight, Check, Eye, EyeOff, Lock, ShieldCheck } from "lucide-react";
+import { ArrowRight, Check, Eye, EyeOff, Lock, ShieldCheck, User } from "lucide-react";
 import { AuthShell } from "@/components/auth/auth-shell";
 import { authErrorMessage, cognitoConfigured } from "@/lib/cognito";
 import { cn } from "@/lib/utils";
@@ -12,6 +12,7 @@ const MIN_LENGTH = 8;
 
 export default function ResetPasswordPage() {
   const router = useRouter();
+  const [name, setName] = useState("");
   const [password, setPassword] = useState("");
   const [confirm, setConfirm] = useState("");
   const [show, setShow] = useState(false);
@@ -28,9 +29,14 @@ export default function ResetPasswordPage() {
     setReset({ email: sp.get("email"), code: sp.get("code") });
   }, []);
 
+  const isForgot = Boolean(reset.code && reset.email);
+  const needsName = !isForgot;
   const tooShort = password.length > 0 && password.length < MIN_LENGTH;
   const mismatch = confirm.length > 0 && confirm !== password;
-  const valid = password.length >= MIN_LENGTH && confirm === password;
+  const valid =
+    password.length >= MIN_LENGTH &&
+    confirm === password &&
+    (!needsName || name.trim().length > 1);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -52,8 +58,12 @@ export default function ResetPasswordPage() {
         });
         router.push("/login");
       } else {
-        // Invited user setting their password on first sign-in.
-        await confirmSignIn({ challengeResponse: password });
+        // Invited user setting their password + name on first sign-in.
+        // They already belong to a workspace, so they skip onboarding.
+        await confirmSignIn({
+          challengeResponse: password,
+          options: { userAttributes: { name: name.trim() } },
+        });
         router.push("/app");
       }
     } catch (err) {
@@ -73,8 +83,6 @@ export default function ResetPasswordPage() {
         : null
     : null;
 
-  const isForgot = Boolean(reset.code && reset.email);
-
   return (
     <AuthShell
       title={isForgot ? "Set a new password" : "Create your password"}
@@ -91,6 +99,32 @@ export default function ResetPasswordPage() {
       </div>
 
       <form onSubmit={handleSubmit} className="space-y-5" noValidate>
+        {needsName && (
+          <div>
+            <label
+              htmlFor="fullname"
+              className="mb-1.5 block text-sm font-medium text-ink"
+            >
+              Your name
+            </label>
+            <div className="relative">
+              <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-ink-soft">
+                <User className="size-4" />
+              </span>
+              <input
+                id="fullname"
+                type="text"
+                required
+                autoComplete="name"
+                placeholder="e.g. Avery Quinn"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                className={cn(inputClass, "pr-3")}
+              />
+            </div>
+          </div>
+        )}
+
         <div>
           <label
             htmlFor="password"

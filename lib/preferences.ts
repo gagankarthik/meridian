@@ -4,6 +4,10 @@
  * browser. The theme is applied by toggling the `.dark` class on <html>, which
  * the design tokens in globals.css key off of.
  */
+import { useEffect, useState } from "react";
+
+/** Fired in-tab when preferences change, so live UI (e.g. links) can react. */
+export const PREFS_EVENT = "meridian:prefs";
 
 export type ThemePref = "system" | "light" | "dark";
 
@@ -51,6 +55,41 @@ export function savePreferences(prefs: Preferences) {
   } catch {
     /* storage full / unavailable — preferences stay in-memory for the session */
   }
+  // Let same-tab listeners (project links, etc.) pick up the change immediately.
+  window.dispatchEvent(new CustomEvent(PREFS_EVENT, { detail: prefs }));
+}
+
+const VIEW_PATHS: Record<string, string> = {
+  summary: "/app/summary",
+  board: "/app/board",
+  table: "/app/table",
+  timeline: "/app/timeline",
+};
+
+/** Route a project should open to, honouring the user's default-view choice. */
+export function projectHref(view: string, projectId: string): string {
+  const base = VIEW_PATHS[view] ?? "/app/summary";
+  return `${base}?project=${projectId}`;
+}
+
+/**
+ * The user's chosen default project view. Starts at "summary" (matching SSR)
+ * and resolves to the saved value after mount, updating live when the
+ * preference changes in this tab or another.
+ */
+export function useDefaultProjectView(): string {
+  const [view, setView] = useState<string>("summary");
+  useEffect(() => {
+    const sync = () => setView(loadPreferences().defaultView);
+    sync();
+    window.addEventListener(PREFS_EVENT, sync);
+    window.addEventListener("storage", sync);
+    return () => {
+      window.removeEventListener(PREFS_EVENT, sync);
+      window.removeEventListener("storage", sync);
+    };
+  }, []);
+  return view;
 }
 
 /** Resolve + apply the active theme by toggling `.dark` on the document root. */

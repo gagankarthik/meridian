@@ -15,6 +15,8 @@ export async function PATCH(request: Request) {
   const allowed: Record<string, unknown> = {};
   if (typeof patch.name === "string") allowed.name = patch.name;
   if (typeof patch.company === "string") allowed.company = patch.company;
+  if (typeof patch.companySize === "string") allowed.companySize = patch.companySize;
+  if (typeof patch.industry === "string") allowed.industry = patch.industry;
   // Note: the logo is uploaded via POST /api/workspace/logo (S3-backed), not here.
 
   const existing = await getItem(key.wsMeta(r.ctx.workspaceId));

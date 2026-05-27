@@ -40,6 +40,8 @@ export async function POST(request: Request) {
     plan: "Business",
     ownerId: user.sub,
     company: body.companyName ?? "",
+    companySize: body.companySize ?? "",
+    industry: body.industry ?? "",
     logoKey: logoStored.logoKey,
     logo: logoStored.logo,
   });
