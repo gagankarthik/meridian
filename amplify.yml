@@ -21,10 +21,10 @@
 #   to the app's compute. The SDK picks it up automatically — set no keys.
 #
 #   ALTERNATIVE (static keys): set non-reserved vars and the app passes them
-#   to the SDK explicitly:
-#     MERIDIAN_AWS_ACCESS_KEY_ID
-#     MERIDIAN_AWS_SECRET_ACCESS_KEY
-#     MERIDIAN_AWS_SESSION_TOKEN   (optional, for temporary credentials)
+#   to the SDK explicitly (NOT NEXT_PUBLIC_ — they stay server-only):
+#     NEXT_AWS_ACCESS_KEY_ID
+#     NEXT_AWS_SECRET_ACCESS_KEY
+#     NEXT_AWS_SESSION_TOKEN   (optional, for temporary credentials)
 #
 # Locally (.env.local) the standard AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY
 # still work — the SDK's default chain reads them automatically.
@@ -43,6 +43,9 @@ frontend:
             echo "NEXT_PUBLIC_COGNITO_USER_POOL_CLIENT_ID=$NEXT_PUBLIC_COGNITO_USER_POOL_CLIENT_ID"
             echo "NEXT_PUBLIC_AWS_DYNAMODB_TABLE_NAME=$NEXT_PUBLIC_AWS_DYNAMODB_TABLE_NAME"
             echo "NEXT_PUBLIC_AWS_S3_BUCKET=$NEXT_PUBLIC_AWS_S3_BUCKET"
+            echo "NEXT_AWS_ACCESS_KEY_ID=$NEXT_AWS_ACCESS_KEY_ID"
+            echo "NEXT_AWS_SECRET_ACCESS_KEY=$NEXT_AWS_SECRET_ACCESS_KEY"
+            echo "NEXT_AWS_SESSION_TOKEN=$NEXT_AWS_SESSION_TOKEN"
           } >> .env.production
     build:
       commands:

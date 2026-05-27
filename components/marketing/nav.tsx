@@ -90,12 +90,18 @@ export function SiteNav() {
   }, []);
 
   return (
-    <header className="fixed inset-x-0 top-0 z-50">
+    <header
+      className={cn(
+        "fixed inset-x-0 top-0 z-50 border-b transition-all duration-300",
+        scrolled
+          ? "border-line bg-paper/85 backdrop-blur-xl supports-[backdrop-filter]:bg-paper/70"
+          : "border-transparent",
+      )}
+    >
       <div
         className={cn(
-          "mx-auto flex h-16 max-w-[1240px] items-center justify-between px-5 transition-all duration-300 sm:px-8 lg:px-12",
-          scrolled &&
-            "h-14 border-b border-line bg-paper/85 backdrop-blur-xl supports-[backdrop-filter]:bg-paper/70",
+          "mx-auto flex max-w-[1240px] items-center justify-between px-5 transition-all duration-300 sm:px-8 lg:px-12",
+          scrolled ? "h-14" : "h-16",
         )}
       >
         <Link href="/" className="text-ink">
