@@ -46,6 +46,14 @@ export type Task = {
   /** Optional scheduling / review fields set on creation. */
   startDate?: string;
   reviewerId?: string;
+  /** Review workflow: set when a task is sent for review and decided on.
+      "pending" while awaiting the reviewer; "approved"/"rejected" after. */
+  reviewStatus?: "pending" | "approved" | "rejected";
+  /** Reason the reviewer gave when requesting changes (optional). */
+  reviewNote?: string;
+  /** Member id of who made the last review decision, and when. */
+  reviewedById?: string;
+  reviewedAt?: number;
   /** Real, user-authored content (persisted) — empty until added. */
   description?: string;
   subtasks?: SubTask[];

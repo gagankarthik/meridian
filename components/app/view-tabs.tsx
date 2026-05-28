@@ -44,7 +44,7 @@ const TABS = [
   { id: "board", label: "Board", href: "/app/board", icon: Columns3 },
   { id: "table", label: "Table", href: "/app/table", icon: Table2 },
   { id: "timeline", label: "Timeline", href: "/app/timeline", icon: GanttChartSquare },
-  { id: "approvals", label: "Approvals", href: "/app/approvals", icon: CheckCircle2 },
+  { id: "approvals", label: "Review", href: "/app/approvals", icon: CheckCircle2 },
   { id: "attachments", label: "Attachments", href: "/app/attachments", icon: Paperclip },
   { id: "team", label: "Team", href: "/app/project-team", icon: Users },
   { id: "settings", label: "Settings", href: "/app/project-settings", icon: Settings },

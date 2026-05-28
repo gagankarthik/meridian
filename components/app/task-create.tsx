@@ -72,6 +72,13 @@ export function TaskCreate() {
     ? ws.canInProject(projectId, "create")
     : ws.projects.some((p) => ws.canInProject(p.id, "create"));
 
+  // Owners/admins may backdate tasks; members are limited to today onward.
+  const myRole = ws.myProjectRole(projectId);
+  const canBackdate = myRole === "Owner" || myRole === "Admin";
+  const today = new Date().toLocaleDateString("en-CA"); // local YYYY-MM-DD
+  const startMin = canBackdate ? undefined : today;
+  const dueMin = canBackdate ? startDate || undefined : startDate || today;
+
   const columns = ws.columnsForProject(projectId);
   // Strictly project-confined: ONLY members on this project's team can be an
   // assignee or reviewer — never anyone outside it (not even yourself unless
@@ -554,6 +561,7 @@ export function TaskCreate() {
                 <input
                   type="date"
                   value={startDate}
+                  min={startMin}
                   onChange={(e) => setStartDate(e.target.value)}
                   className="w-full rounded-lg border border-line bg-paper-raised px-3 py-2 text-[13px] text-ink outline-none transition-colors focus:border-signal/40 focus:bg-card"
                 />
@@ -564,10 +572,17 @@ export function TaskCreate() {
                 <input
                   type="date"
                   value={due}
+                  min={dueMin}
                   onChange={(e) => setDue(e.target.value)}
                   className="w-full rounded-lg border border-line bg-paper-raised px-3 py-2 text-[13px] text-ink outline-none transition-colors focus:border-signal/40 focus:bg-card"
                 />
               </Detail>
+              {!canBackdate && (
+                <p className="-mt-1 text-[11px] text-ink-soft">
+                  Members can schedule from today onward. Ask an admin to
+                  backdate.
+                </p>
+              )}
 
               {/* Tag */}
               <Detail label="Tag">

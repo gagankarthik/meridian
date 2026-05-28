@@ -35,6 +35,16 @@ const TAB_IDS: TabId[] = ["assigned", "created", "all"];
 export function MyTasksList({ mode }: { mode?: "assigned" | "created" }) {
   const ws = useWorkspace();
   const meId = ws.me.id;
+  // `ws.me.id` is the Cognito sub, but tasks store assignee/creator ids as
+  // member RECORD ids (≠ the sub for invited users). Match against both so
+  // "Assigned to me" / "Created by me" work for everyone, not just the owner.
+  const myRecordId = ws.members.find(
+    (m) => m.id === meId || m.userId === meId,
+  )?.id;
+  const myIds = useMemo(
+    () => new Set([meId, myRecordId].filter(Boolean) as string[]),
+    [meId, myRecordId],
+  );
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
@@ -53,12 +63,12 @@ export function MyTasksList({ mode }: { mode?: "assigned" | "created" }) {
   const [query, setQuery] = useState("");
 
   const isAssigned = (t: Task) =>
-    t.assigneeIds.includes(meId) || t.assigneeId === meId;
+    t.assigneeIds.some((a) => myIds.has(a)) || myIds.has(t.assigneeId);
   // New tasks record their real creator. Tasks created before that field
   // existed have no `createdById`, so fall back to "you're the primary
   // assignee" (a safe proxy — no false positives) so your work still surfaces.
   const isCreated = (t: Task) =>
-    t.createdById ? t.createdById === meId : t.assigneeId === meId;
+    t.createdById ? myIds.has(t.createdById) : myIds.has(t.assigneeId);
 
   // Tab counts reflect the real number of tasks in each grouping (ignoring the
   // status/search filters, which narrow *within* a tab).
@@ -79,7 +89,7 @@ export function MyTasksList({ mode }: { mode?: "assigned" | "created" }) {
       { id: "all", label: "All", count: all.length, tasks: all },
     ];
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [ws.tasks, meId]);
+  }, [ws.tasks, myIds]);
 
   const active = tabs.find((t) => t.id === tab) ?? tabs[0];
   const baseTasks = active.tasks;

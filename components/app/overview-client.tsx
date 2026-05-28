@@ -8,9 +8,9 @@ import {
   Circle,
   CircleDot,
   Crown,
-  Eye,
   ListTodo,
   Loader2,
+  ShieldCheck,
   Users,
 } from "lucide-react";
 import {
@@ -529,7 +529,7 @@ function PersonRow({ id, kind }: { id: string; kind: "Owner" | "Admin" }) {
         {isLead ? (
           <Crown className="size-3" strokeWidth={2} />
         ) : (
-          <Eye className="size-3" strokeWidth={2} />
+          <ShieldCheck className="size-3" strokeWidth={2} />
         )}
         {kind}
       </span>

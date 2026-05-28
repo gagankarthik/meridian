@@ -294,7 +294,9 @@ function ProfileMenu() {
   const [open, setOpen] = useState(false);
   const router = useRouter();
   const ws = useWorkspace();
-  const record = ws.members.find((m) => m.id === ws.me.id);
+  const record = ws.members.find(
+    (m) => m.id === ws.me.id || m.userId === ws.me.id,
+  );
   const me = {
     name: ws.me.name || record?.name || "You",
     email: ws.me.email || record?.email || "",

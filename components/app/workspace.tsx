@@ -22,6 +22,7 @@ import {
   type Activity,
   type Approval,
   type Attachment,
+  type Comment,
   type Member,
   type Notification,
   type Priority,
@@ -140,6 +141,11 @@ type WorkspaceCtx = {
   addTask: (t: NewTask) => Task;
   updateTask: (id: string, patch: Partial<Task>) => void;
   deleteTask: (id: string) => void;
+  /** Move a task into the review column (awaiting the reviewer's decision). */
+  sendForReview: (id: string) => void;
+  /** Record a reviewer's decision: approve (→ Done) or request changes
+      (→ In progress) with an optional reason, logged as a comment. */
+  reviewTask: (id: string, decision: "approved" | "rejected", note?: string) => void;
   /** Upload files to a task: S3 (presigned PUT) then record as attachments. */
   uploadTaskDocuments: (
     taskId: string,
@@ -316,10 +322,12 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
   }, []);
 
   /* Keep the read-only helper store (memberById/projectById/…) in sync with
-     whatever data is active, in both demo and live mode. */
-  useEffect(() => {
-    hydrateRuntime({ members, projects, tasks, columns });
-  }, [members, projects, tasks, columns]);
+     whatever data is active. Done SYNCHRONOUSLY during render — not in an
+     effect — so lookups are correct on the very first paint after bootstrap.
+     An effect updates the store only after commit and doesn't trigger a
+     re-render, which left names/avatars (Assignee/Reporter/Reviewer) blank on
+     a hard refresh until some unrelated state change happened to repaint. */
+  hydrateRuntime({ members, projects, tasks, columns });
 
   const can = (action: WsAction) =>
     role === "admin" ? true : role === "editor" ? action !== "manage" : false;
@@ -515,9 +523,13 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
         setMe((m) => ({ ...m, name: patch.name as string }));
       }
       setMembers((ms) =>
-        ms.map((m) => (m.id === meId ? { ...m, ...patch } : m)),
+        ms.map((m) =>
+          m.id === meId || m.userId === meId ? { ...m, ...patch } : m,
+        ),
       );
-      // …and persist to this user's own member record.
+      // …and persist to this user's own member record. Send the sub so the
+      // route's self-edit check (id === caller sub) passes; it resolves the
+      // real (possibly invite-keyed) record server-side.
       persist(`/api/members/${meId}`, {
         method: "PATCH",
         body: JSON.stringify(patch),
@@ -693,6 +705,41 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
       setTasks((ts) => ts.filter((x) => x.id !== id));
       setSelectedId((s) => (s === id ? null : s));
       persist(`/api/tasks/${id}`, { method: "DELETE" });
+    },
+    sendForReview: (id) => {
+      const patch = { column: "review", reviewStatus: "pending" as const };
+      setTasks((ts) => ts.map((t) => (t.id === id ? { ...t, ...patch } : t)));
+      persist(`/api/tasks/${id}`, {
+        method: "PATCH",
+        body: JSON.stringify(patch),
+      });
+    },
+    reviewTask: (id, decision, note) => {
+      const t = tasks.find((x) => x.id === id);
+      const approved = decision === "approved";
+      // Log the decision as a comment so the task's history reads naturally.
+      const comment: Comment = {
+        id: nextId("c"),
+        authorId: myMemberId(),
+        text: approved
+          ? "Approved this task."
+          : `Requested changes${note ? `: ${note}` : "."}`,
+        at: Date.now(),
+      };
+      const comments = [...(t?.comments ?? []), comment];
+      const patch: Partial<Task> = {
+        column: approved ? "done" : "in_progress",
+        reviewStatus: decision,
+        reviewedById: myMemberId(),
+        reviewedAt: Date.now(),
+        comments,
+        ...(note ? { reviewNote: note } : {}),
+      };
+      setTasks((ts) => ts.map((x) => (x.id === id ? { ...x, ...patch } : x)));
+      persist(`/api/tasks/${id}`, {
+        method: "PATCH",
+        body: JSON.stringify(patch),
+      });
     },
     uploadTaskDocuments: (taskId, projectId, files) =>
       uploadDocuments(projectId, files, taskId),

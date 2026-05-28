@@ -5,10 +5,13 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { AnimatePresence, motion } from "motion/react";
 import {
+  AlertCircle,
   ArrowLeft,
   Check,
+  CheckCircle2,
   ChevronDown,
   ChevronRight,
+  Clock,
   Download,
   FileText,
   Flag,
@@ -17,6 +20,7 @@ import {
   Plus,
   Search,
   Send,
+  ShieldCheck,
   Trash2,
   X,
 } from "lucide-react";
@@ -83,6 +87,17 @@ function TaskBody({ task }: { task: Task }) {
   const canEdit = ws.canInProject(task.projectId, "edit");
   const canAssign = ws.canInProject(task.projectId, "assign");
   const canDelete = ws.canInProject(task.projectId, "delete");
+
+  // The assigned reviewer (or any owner/admin) decides on a review. Match the
+  // reviewer against both my sub and my member-record id (they differ for
+  // invited users).
+  const myRecordId = ws.members.find(
+    (m) => m.id === ws.me.id || m.userId === ws.me.id,
+  )?.id;
+  const isReviewer = task.reviewerId
+    ? [ws.me.id, myRecordId].includes(task.reviewerId)
+    : false;
+  const canReviewThis = isReviewer || ws.canInProject(task.projectId, "manage");
 
   // All local state seeded via useState initializers — TaskBody is keyed by
   // task.id, so this reseeds whenever a different task loads. No effect sync.
@@ -364,6 +379,14 @@ function TaskBody({ task }: { task: Task }) {
             </h1>
           )}
         </div>
+
+        {/* ---- Review ---- */}
+        <ReviewPanel
+          task={task}
+          reviewer={reviewer}
+          canEdit={canEdit}
+          canReview={canReviewThis}
+        />
 
         {/* ---- 8 / 4 layout ---- */}
         <div className="grid grid-cols-1 gap-5 lg:grid-cols-12">
@@ -730,6 +753,198 @@ function TaskBody({ task }: { task: Task }) {
       />
     </>
   );
+}
+
+/* ---- Review workflow panel (send for review / approve / request changes) ---- */
+function ReviewPanel({
+  task,
+  reviewer,
+  canEdit,
+  canReview,
+}: {
+  task: Task;
+  reviewer?: Member;
+  canEdit: boolean;
+  canReview: boolean;
+}) {
+  const ws = useWorkspace();
+  const [rejecting, setRejecting] = useState(false);
+  const [reason, setReason] = useState("");
+
+  const status = task.column === "review" ? "pending" : task.reviewStatus;
+  const reviewedBy = task.reviewedById ? memberById(task.reviewedById) : undefined;
+
+  const submitReject = () => {
+    ws.reviewTask(task.id, "rejected", reason.trim() || undefined);
+    setReason("");
+    setRejecting(false);
+  };
+
+  // Awaiting the reviewer's decision.
+  if (status === "pending") {
+    return (
+      <section className="mb-5 rounded-2xl border border-[#d9842b]/35 bg-[#d9842b]/[0.06] p-4 shadow-card">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="flex items-center gap-2.5">
+            <span className="grid size-9 shrink-0 place-items-center rounded-xl bg-[#d9842b]/15 text-[#b8690f] dark:text-[#e2a200]">
+              <Clock className="size-4" />
+            </span>
+            <div>
+              <p className="text-[14px] font-bold text-ink">In review</p>
+              <p className="text-[12px] text-ink-soft">
+                {reviewer
+                  ? `Waiting on ${reviewer.name} to approve.`
+                  : "Waiting on an owner or admin to approve."}
+              </p>
+            </div>
+          </div>
+          {canReview && !rejecting && (
+            <div className="flex shrink-0 gap-2">
+              <button
+                type="button"
+                onClick={() => setRejecting(true)}
+                className="inline-flex items-center gap-1.5 rounded-xl border border-line bg-card px-3 py-2 text-[13px] font-semibold text-ink transition-colors hover:border-red-400 hover:text-red-600"
+              >
+                <X className="size-3.5" />
+                Request changes
+              </button>
+              <button
+                type="button"
+                onClick={() => ws.reviewTask(task.id, "approved")}
+                className="inline-flex items-center gap-1.5 rounded-xl bg-emerald-600 px-3.5 py-2 text-[13px] font-bold text-white transition-colors hover:bg-emerald-700"
+              >
+                <Check className="size-3.5" />
+                Approve
+              </button>
+            </div>
+          )}
+        </div>
+        {canReview && rejecting && (
+          <div className="mt-3 rounded-xl border border-line bg-card p-3">
+            <textarea
+              autoFocus
+              value={reason}
+              onChange={(e) => setReason(e.target.value)}
+              rows={2}
+              placeholder="Optional — what needs to change?"
+              className="w-full resize-y rounded-lg border border-line bg-paper-raised px-3 py-2 text-[13px] text-ink outline-none transition-colors placeholder:text-ink-soft focus:border-signal/40"
+            />
+            <div className="mt-2 flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  setRejecting(false);
+                  setReason("");
+                }}
+                className="rounded-lg border border-line bg-card px-3 py-1.5 text-[12.5px] font-semibold text-ink-muted transition-colors hover:text-ink"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={submitReject}
+                className="rounded-lg bg-red-600 px-3 py-1.5 text-[12.5px] font-bold text-white transition-colors hover:bg-red-700"
+              >
+                Request changes
+              </button>
+            </div>
+          </div>
+        )}
+        {!canReview && (
+          <p className="mt-2.5 text-[12px] text-ink-soft">
+            Only {reviewer ? reviewer.name : "an owner or admin"} can decide on
+            this review.
+          </p>
+        )}
+      </section>
+    );
+  }
+
+  // Approved.
+  if (status === "approved") {
+    return (
+      <section className="mb-5 flex items-center gap-2.5 rounded-2xl border border-emerald-600/30 bg-emerald-500/[0.07] p-4 shadow-card">
+        <span className="grid size-9 shrink-0 place-items-center rounded-xl bg-emerald-500/15 text-emerald-700 dark:text-emerald-300">
+          <CheckCircle2 className="size-4" />
+        </span>
+        <div>
+          <p className="text-[14px] font-bold text-ink">Approved</p>
+          <p className="text-[12px] text-ink-soft">
+            {reviewedBy ? `Approved by ${reviewedBy.name}` : "Approved"}
+            {task.reviewedAt ? ` · ${relativeTime(task.reviewedAt)}` : ""}
+          </p>
+        </div>
+      </section>
+    );
+  }
+
+  // Changes requested.
+  if (status === "rejected") {
+    return (
+      <section className="mb-5 rounded-2xl border border-red-500/35 bg-red-500/[0.06] p-4 shadow-card">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div className="flex items-start gap-2.5">
+            <span className="grid size-9 shrink-0 place-items-center rounded-xl bg-red-500/15 text-red-600 dark:text-red-300">
+              <AlertCircle className="size-4" />
+            </span>
+            <div>
+              <p className="text-[14px] font-bold text-ink">Changes requested</p>
+              <p className="text-[12px] text-ink-soft">
+                {reviewedBy ? `By ${reviewedBy.name}` : "Reviewer asked for changes"}
+                {task.reviewedAt ? ` · ${relativeTime(task.reviewedAt)}` : ""}
+              </p>
+              {task.reviewNote && (
+                <p className="mt-1.5 rounded-lg bg-card px-3 py-2 text-[13px] text-ink-muted">
+                  {task.reviewNote}
+                </p>
+              )}
+            </div>
+          </div>
+          {canEdit && (
+            <button
+              type="button"
+              onClick={() => ws.sendForReview(task.id)}
+              className="inline-flex shrink-0 items-center gap-1.5 rounded-xl bg-signal px-3.5 py-2 text-[13px] font-bold text-white transition-colors hover:bg-signal-strong"
+            >
+              <Send className="size-3.5" />
+              Send for review again
+            </button>
+          )}
+        </div>
+      </section>
+    );
+  }
+
+  // Not yet in review — offer to send it (editors only; hide once Done).
+  if (canEdit && task.column !== "done") {
+    return (
+      <section className="mb-5 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-line bg-card p-4 shadow-card">
+        <div className="flex items-center gap-2.5">
+          <span className="grid size-9 shrink-0 place-items-center rounded-xl bg-signal-soft text-signal">
+            <ShieldCheck className="size-4" />
+          </span>
+          <div>
+            <p className="text-[14px] font-bold text-ink">Ready for review?</p>
+            <p className="text-[12px] text-ink-soft">
+              {reviewer
+                ? `Send this to ${reviewer.name} to approve.`
+                : "Send this to an owner or admin to approve."}
+            </p>
+          </div>
+        </div>
+        <button
+          type="button"
+          onClick={() => ws.sendForReview(task.id)}
+          className="inline-flex shrink-0 items-center gap-1.5 rounded-xl bg-signal px-3.5 py-2 text-[13px] font-bold text-white transition-colors hover:bg-signal-strong"
+        >
+          <Send className="size-3.5" />
+          Send for review
+        </button>
+      </section>
+    );
+  }
+
+  return null;
 }
 
 /* ---- Confirm dialog (used for destructive actions) ---- */

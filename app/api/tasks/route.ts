@@ -45,6 +45,22 @@ export async function POST(request: Request) {
     );
   }
 
+  // Members can't backdate tasks (owners/admins can). Use a ~1.5-day floor so
+  // timezone skew never rejects a legitimate "today" pick.
+  if (pr === "Member") {
+    const floor = new Date(Date.now() - 36 * 60 * 60 * 1000)
+      .toISOString()
+      .slice(0, 10);
+    const isPast = (d: unknown) =>
+      typeof d === "string" && /^\d{4}-\d{2}-\d{2}$/.test(d) && d < floor;
+    if (isPast(body.startDate) || isPast(body.due)) {
+      return Response.json(
+        { error: "Members can only schedule tasks from today onward" },
+        { status: 400 },
+      );
+    }
+  }
+
   // Honor a safe client-provided id so the optimistic id matches the persisted
   // one (otherwise navigating to the just-created task 404s as "Task not found").
   const provided = typeof body.id === "string" ? body.id.trim() : "";
