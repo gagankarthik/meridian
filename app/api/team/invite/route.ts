@@ -1,11 +1,49 @@
 import { AdminCreateUserCommand, AdminAddUserToGroupCommand } from "@aws-sdk/client-cognito-identity-provider";
-import { ddbConfigured, key, putItem, withEmailIndex } from "@/lib/ddb";
+import { ddbConfigured, getItem, key, putItem, withEmailIndex } from "@/lib/ddb";
 import {
   cognitoServerClient,
   serverConfigured,
   serverPoolId,
 } from "@/lib/cognito-server";
-import { requireWorkspace } from "@/lib/workspace-server";
+import { projectRoles, requireWorkspace } from "@/lib/workspace-server";
+
+/** Project roles assignable via invite (you can't invite someone as Owner). */
+function asProjectRole(raw: string | undefined): "Admin" | "Member" | "Viewer" {
+  const r = (raw ?? "").toLowerCase();
+  if (r === "admin") return "Admin";
+  if (r === "viewer") return "Viewer";
+  return "Member";
+}
+
+/**
+ * Add member ids to a project's team in the given role, keeping the role arrays
+ * mutually exclusive. Migrates legacy lead/reviewer projects to the new shape.
+ */
+async function assignToProject(
+  workspaceId: string,
+  projectId: string,
+  memberIds: string[],
+  role: "Admin" | "Member" | "Viewer",
+) {
+  const p = await getItem(key.project(workspaceId, projectId));
+  if (!p) return;
+  const roles = projectRoles(p);
+  const add = memberIds.filter((id) => id && id !== roles.ownerId);
+  const strip = (arr: string[]) => arr.filter((x) => !add.includes(x));
+  const next: Record<string, unknown> = {
+    ...p,
+    ownerId: roles.ownerId,
+    adminIds: strip(roles.adminIds),
+    memberIds: strip(roles.memberIds),
+    viewerIds: strip(roles.viewerIds),
+  };
+  const field =
+    role === "Admin" ? "adminIds" : role === "Viewer" ? "viewerIds" : "memberIds";
+  next[field] = [...(next[field] as string[]), ...add];
+  delete next.leadIds;
+  delete next.reviewerIds;
+  await putItem(next);
+}
 
 function nameFromEmail(email: string) {
   return email
@@ -55,12 +93,22 @@ export async function POST(request: Request) {
   if ("error" in r) return r.error;
   const wid = r.ctx.workspaceId;
 
-  const projects = groups.map((g) => g.split("#")[0]).filter(Boolean);
-  const role = groups.length ? (groups[0].split("#")[1] ?? "Member") : "Member";
+  // groups are "<projectId>#<ProjectRole>". The per-project role lives in the
+  // project's own team arrays; the workspace role stays "Member" so a project
+  // admin/viewer isn't accidentally a workspace-wide super-admin (only the
+  // workspace owner is). Visibility still tracks the member's `projects` list.
+  const assignments = groups
+    .map((g) => {
+      const [pid, rawRole] = g.split("#");
+      return { pid, role: asProjectRole(rawRole) };
+    })
+    .filter((a) => a.pid);
+  const projects = Array.from(new Set(assignments.map((a) => a.pid)));
 
   const results = await Promise.all(
     emails.map(async (email) => {
       let alreadyInvited = false;
+      let memberId: string | undefined;
       try {
         if (serverConfigured) {
           const client = cognitoServerClient();
@@ -112,7 +160,7 @@ export async function POST(request: Request) {
         // Only create a member record for a brand-new invite — a RESEND
         // targets someone already in the workspace, so skip (no duplicates).
         if (ddbConfigured && !alreadyInvited) {
-          const memberId = `inv-${crypto.randomUUID().slice(0, 8)}`;
+          memberId = `inv-${crypto.randomUUID().slice(0, 8)}`;
           const name = nameFromEmail(email);
           await putItem(
             withEmailIndex(
@@ -122,7 +170,7 @@ export async function POST(request: Request) {
                 id: memberId,
                 name,
                 email,
-                role,
+                role: "Member",
                 initials: initials(name),
                 status: "invited",
                 hue: "#2563eb",
@@ -133,7 +181,7 @@ export async function POST(request: Request) {
             ),
           );
         }
-        return { email, ok: true, resent: alreadyInvited };
+        return { email, ok: true, resent: alreadyInvited, memberId };
       } catch (err) {
         console.error("[invite] failed for", email, err);
         const e = err as { name?: string; message?: string };
@@ -145,6 +193,18 @@ export async function POST(request: Request) {
       }
     }),
   );
+
+  // Place the newly-created members onto each selected project in the chosen
+  // role (one read-modify-write per project to avoid clobbering concurrent
+  // additions across invitees).
+  const newIds = results
+    .map((x) => x.memberId)
+    .filter((x): x is string => Boolean(x));
+  if (ddbConfigured && newIds.length) {
+    for (const a of assignments) {
+      await assignToProject(wid, a.pid, newIds, a.role);
+    }
+  }
 
   return Response.json({ ok: results.every((x) => x.ok), results });
 }

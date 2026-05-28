@@ -53,8 +53,8 @@ function progressFor(column: string) {
 
 export function TableClient({ projectId }: { projectId: string }) {
   const ws = useWorkspace();
-  const canEdit = ws.can("edit");
-  const canCreate = ws.can("create");
+  const canEdit = ws.canInProject(projectId, "edit");
+  const canCreate = ws.canInProject(projectId, "create");
 
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [dragId, setDragId] = useState<string | null>(null);
@@ -63,7 +63,7 @@ export function TableClient({ projectId }: { projectId: string }) {
   const [renameCol, setRenameCol] = useState<string | null>(null);
   const [renameValue, setRenameValue] = useState("");
   const [removeTarget, setRemoveTarget] = useState<{ id: string; name: string } | null>(null);
-  const canManage = ws.can("manage");
+  const canManage = ws.canInProject(projectId, "manage");
 
   const projectTasks = useMemo(
     () => ws.tasks.filter((t) => t.projectId === projectId),

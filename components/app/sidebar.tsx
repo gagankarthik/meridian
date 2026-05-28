@@ -134,7 +134,7 @@ export function AppSidebar({
               Projects
             </button>
           )}
-          {ws.can("manage") && (
+          {ws.canCreateProject && (
             <button
               onClick={() => setCreateOpen(true)}
               title="New project"

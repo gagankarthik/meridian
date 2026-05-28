@@ -40,7 +40,6 @@ export function TaskCreate() {
   const ws = useWorkspace();
   const router = useRouter();
   const searchParams = useSearchParams();
-  const canCreate = ws.can("create");
 
   // Context from wherever "new task" was launched: a project page passes
   // ?project=…; a board/table column's "+" also passes &status=… so both the
@@ -66,16 +65,30 @@ export function TaskCreate() {
   const [files, setFiles] = useState<File[]>([]);
   const fileRef = useRef<HTMLInputElement>(null);
 
+  // You can create a task only where you're Owner/Admin/Member. Before a
+  // project resolves from the URL, allow it if ANY accessible project qualifies
+  // (avoids a flash of the "no permission" screen on first paint).
+  const canCreate = projectId
+    ? ws.canInProject(projectId, "create")
+    : ws.projects.some((p) => ws.canInProject(p.id, "create"));
+
   const columns = ws.columnsForProject(projectId);
   // Strictly project-confined: ONLY members on this project's team can be an
   // assignee or reviewer — never anyone outside it (not even yourself unless
   // you're on the project). A project is a confined space.
   const eligibleMembers = eligibleMembersFor(projectId, ws.projects, ws.members);
 
-  // Project: fixed from the URL, else default to the first accessible one.
+  // Project: fixed from the URL, else default to the first one the user can
+  // actually create in (skip projects where they're only a viewer).
   useEffect(() => {
-    if (projectParam) setProjectId(projectParam);
-    else if (ws.projects[0]) setProjectId((cur) => cur || ws.projects[0].id);
+    if (projectParam) {
+      setProjectId(projectParam);
+      return;
+    }
+    const firstCreatable =
+      ws.projects.find((p) => ws.canInProject(p.id, "create")) ?? ws.projects[0];
+    if (firstCreatable) setProjectId((cur) => cur || firstCreatable.id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [projectParam, ws.projects]);
 
   // Status: fixed from the URL, else default to "To do" (or the first column).

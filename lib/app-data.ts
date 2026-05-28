@@ -60,9 +60,15 @@ export type Project = {
   progress: number;
   status: "On track" | "At risk" | "Off track";
   open: number;
-  leadIds: string[];
-  reviewerIds: string[];
+  /** The member id of the creator. The owner has full control, including
+      deleting the project — see [[ProjectRole]]. */
+  ownerId: string;
+  /** Members with full control except deleting the project. */
+  adminIds: string[];
+  /** Members who can work on tasks but not edit/delete the project. */
   memberIds: string[];
+  /** Members with read-only access to the project. */
+  viewerIds: string[];
   /** Short summary shown under the project name. */
   description?: string;
   /** Schedule (ISO yyyy-mm-dd) — drives the roadmap timeline. */
@@ -161,19 +167,28 @@ export function projectById(id: string): Project | undefined {
   return runtime.projects.find((p) => p.id === id);
 }
 
-export type ProjectRole = "Lead" | "Reviewer" | "Member";
+export type ProjectRole = "Owner" | "Admin" | "Member" | "Viewer";
 
-export function projectRole(projectId: string, memberId: string): ProjectRole {
+/** The member's role on a project, or null when they aren't on its team. */
+export function projectRole(
+  projectId: string,
+  memberId: string,
+): ProjectRole | null {
   const p = projectById(projectId);
-  if (p?.leadIds.includes(memberId)) return "Lead";
-  if (p?.reviewerIds.includes(memberId)) return "Reviewer";
-  return "Member";
+  if (!p) return null;
+  if (p.ownerId === memberId) return "Owner";
+  if (p.adminIds.includes(memberId)) return "Admin";
+  if (p.memberIds.includes(memberId)) return "Member";
+  if (p.viewerIds.includes(memberId)) return "Viewer";
+  return null;
 }
 
-/** All member ids on a project: declared members ∪ leads ∪ reviewers ∪ task assignees. */
+/** All member ids on a project: owner ∪ admins ∪ members ∪ viewers ∪ task assignees. */
 export function projectMemberIds(projectId: string): string[] {
   const p = projectById(projectId);
-  const base = p ? [...p.memberIds, ...p.leadIds, ...p.reviewerIds] : [];
+  const base = p
+    ? [p.ownerId, ...p.adminIds, ...p.memberIds, ...p.viewerIds].filter(Boolean)
+    : [];
   const fromTasks = runtime.tasks
     .filter((t) => t.projectId === projectId)
     .flatMap((t) => t.assigneeIds);
@@ -192,15 +207,19 @@ export function eligibleMembersFor(
   members: Member[],
 ): Member[] {
   const p = projects.find((x) => x.id === projectId);
-  const allowed = new Set<string>([
-    ...(p?.leadIds ?? []),
-    ...(p?.reviewerIds ?? []),
-    ...(p?.memberIds ?? []),
-  ]);
+  // Viewers are read-only, so they're never assignable even if their personal
+  // access list (member.projects) includes the project.
+  const viewers = new Set(p?.viewerIds ?? []);
+  const allowed = new Set<string>(
+    [p?.ownerId, ...(p?.adminIds ?? []), ...(p?.memberIds ?? [])].filter(
+      (x): x is string => Boolean(x),
+    ),
+  );
   return members.filter(
     (m) =>
       m.status === "active" &&
-      (allowed.has(m.id) || m.projects?.includes(projectId)),
+      (allowed.has(m.id) ||
+        (Boolean(m.projects?.includes(projectId)) && !viewers.has(m.id))),
   );
 }
 
@@ -232,9 +251,9 @@ export function getTaskDetail(t: Task): TaskDetailData {
   // Reporter = the real creator of the task. (This used to fall back to the
   // assignee, which made Reporter always mirror Assignee.) Legacy tasks with no
   // recorded creator fall back to the project lead — never the assignee.
-  const reporterId = t.createdById || project?.leadIds[0] || "";
-  // Reviewer prefers the task's own field, then the project's reviewer.
-  const reviewerId = t.reviewerId || project?.reviewerIds[0] || "";
+  const reporterId = t.createdById || project?.ownerId || "";
+  // Reviewer is set per task (no project-level reviewer designation anymore).
+  const reviewerId = t.reviewerId || "";
   return {
     description: t.description ?? "",
     subtasks: t.subtasks ?? [],

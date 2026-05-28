@@ -43,10 +43,10 @@ export function ProjectSettingsClient({ projectId }: { projectId: string }) {
   const [saved, setSaved] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
 
-  // Project configuration is a management action — admins/owners only. Members
-  // (editors) work on tasks, not on reconfiguring or deleting the project.
-  const canManage = ws.can("manage");
-  const canDelete = canManage;
+  // Configuration is an owner/admin action on THIS project; deletion is the
+  // owner's alone. Members work on tasks, not on reconfiguring the project.
+  const canManage = ws.canInProject(projectId, "manage");
+  const canDelete = ws.canInProject(projectId, "deleteProject");
   const canEdit = canManage;
 
   function save() {
@@ -219,7 +219,7 @@ export function ProjectSettingsClient({ projectId }: { projectId: string }) {
             People
           </h2>
           <p className="mt-0.5 text-[12px] text-ink-soft">
-            Leads and reviewers for this project.
+            Owner and admins for this project.
           </p>
         </header>
 
@@ -227,14 +227,14 @@ export function ProjectSettingsClient({ projectId }: { projectId: string }) {
           <PeopleRow
             icon={Crown}
             tint="text-[#e2a200]"
-            label="Leads"
-            ids={project.leadIds}
+            label="Owner"
+            ids={project.ownerId ? [project.ownerId] : []}
           />
           <PeopleRow
             icon={ShieldCheck}
             tint="text-[#1d9aaa]"
-            label="Reviewers"
-            ids={project.reviewerIds}
+            label="Admins"
+            ids={project.adminIds}
           />
         </div>
       </section>

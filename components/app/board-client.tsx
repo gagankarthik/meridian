@@ -36,9 +36,9 @@ export function BoardClient({ projectId }: { projectId: string }) {
   const [colOverId, setColOverId] = useState<string | null>(null);
   const [removeTarget, setRemoveTarget] = useState<{ id: string; name: string } | null>(null);
 
-  const canCreate = ws.can("create");
-  const canEdit = ws.can("edit");
-  const canManage = ws.can("manage");
+  const canCreate = ws.canInProject(projectId, "create");
+  const canEdit = ws.canInProject(projectId, "edit");
+  const canManage = ws.canInProject(projectId, "manage");
 
   const projectTasks = useMemo(
     () => ws.tasks.filter((t) => t.projectId === projectId),

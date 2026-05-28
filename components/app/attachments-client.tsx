@@ -29,8 +29,8 @@ const EXT: Record<string, { color: string; icon: LucideIcon }> = {
 
 export function AttachmentsClient({ projectId }: { projectId: string }) {
   const ws = useWorkspace();
-  const canCreate = ws.can("create");
-  const canDelete = ws.can("delete");
+  const canCreate = ws.canInProject(projectId, "create");
+  const canDelete = ws.canInProject(projectId, "delete");
   const [query, setQuery] = useState("");
   const inputRef = useRef<HTMLInputElement>(null);
 

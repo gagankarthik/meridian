@@ -1,4 +1,10 @@
-import { key, putItem, queryPartition, stripKeys } from "@/lib/ddb";
+import {
+  key,
+  putItem,
+  queryPartition,
+  stripKeys,
+  withEmailIndex,
+} from "@/lib/ddb";
 import {
   canWrite,
   requireWorkspace,
@@ -34,25 +40,20 @@ export async function POST(request: Request) {
     : `p-${crypto.randomUUID().slice(0, 8)}`;
   const k = name.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 6) || "PROJ";
 
-  // The creator always belongs to the project — enforced server-side regardless
-  // of the client payload: added as a member, and as the lead when none given.
-  // Use the creator's real MEMBER id (not their Cognito sub): invited members
-  // are keyed by an invite id ≠ sub, so storing the sub would make the creator
-  // fail eligibility on their own project. Falls back to the sub when no member
-  // record exists.
-  const creator = await resolveMemberId(r.ctx.workspaceId, r.ctx.userId);
-  const leadIds: string[] =
-    Array.isArray(body.leadIds) && body.leadIds.length ? body.leadIds : [creator];
-  const reviewerIds: string[] = Array.isArray(body.reviewerIds)
-    ? body.reviewerIds
-    : [];
-  const memberIds = Array.from(
-    new Set<string>([
-      creator,
-      ...(Array.isArray(body.memberIds) ? body.memberIds : []),
-      ...leadIds,
-      ...reviewerIds,
-    ]),
+  // The creator is the project owner — enforced server-side regardless of the
+  // client payload. Use their real MEMBER id (not their Cognito sub): invited
+  // members are keyed by an invite id ≠ sub, so storing the sub would make the
+  // creator fail eligibility on their own project. Other teammates come from
+  // the payload, with the owner stripped out so the roles stay exclusive.
+  const owner = await resolveMemberId(r.ctx.workspaceId, r.ctx.userId);
+  const without = (v: unknown): string[] =>
+    Array.isArray(v)
+      ? v.filter((x): x is string => typeof x === "string" && x !== "" && x !== owner)
+      : [];
+  const adminIds = without(body.adminIds);
+  const memberIds = without(body.memberIds).filter((x) => !adminIds.includes(x));
+  const viewerIds = without(body.viewerIds).filter(
+    (x) => !adminIds.includes(x) && !memberIds.includes(x),
   );
 
   const project = {
@@ -65,12 +66,34 @@ export async function POST(request: Request) {
     progress: 0,
     status: "On track",
     open: 0,
-    leadIds,
-    reviewerIds,
+    ownerId: owner,
+    adminIds,
     memberIds,
+    viewerIds,
     columns: Array.isArray(body.columns) ? body.columns : [],
     description: typeof body.description === "string" ? body.description : "",
   };
   await putItem(project);
+
+  // Keep each team member's personal access list in sync so the project shows
+  // up everywhere it's keyed off `member.projects` (Team page, member detail).
+  const onTeam = new Set([owner, ...adminIds, ...memberIds, ...viewerIds]);
+  const items = await queryPartition(`WS#${r.ctx.workspaceId}`);
+  await Promise.all(
+    items
+      .filter(
+        (it) =>
+          String(it.SK).startsWith("MEMBER#") && onTeam.has(String(it.id)),
+      )
+      .map((m) => {
+        const projects = Array.isArray(m.projects) ? m.projects.map(String) : [];
+        if (projects.includes(id)) return null;
+        const next = { ...m, projects: [...projects, id] };
+        const email = typeof m.email === "string" ? m.email : "";
+        return putItem(email ? withEmailIndex(next, email) : next);
+      })
+      .filter(Boolean) as Promise<void>[],
+  );
+
   return Response.json({ project: stripKeys(project) }, { status: 201 });
 }

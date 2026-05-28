@@ -42,8 +42,7 @@ export function CreateProjectDialog({
   const ws = useWorkspace();
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
-  const [leads, setLeads] = useState<Set<string>>(new Set());
-  const [reviewers, setReviewers] = useState<Set<string>>(new Set());
+  const [members, setMembers] = useState<Set<string>>(new Set());
 
   const key =
     name.trim().toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 6) || "PROJ";
@@ -58,20 +57,19 @@ export function CreateProjectDialog({
   function reset() {
     setName("");
     setDescription("");
-    setLeads(new Set());
-    setReviewers(new Set());
+    setMembers(new Set());
   }
 
   function create() {
     if (!name.trim()) return;
+    // You're the owner of any project you create — you don't add yourself.
+    // Teammates start as members; refine roles afterwards on the Team page.
     ws.addProject({
       name,
       key,
       description: description.trim() || undefined,
       color: colorFromSeed(name.trim()),
-      leadIds: [...leads],
-      reviewerIds: [...reviewers],
-      memberIds: [...new Set([...leads, ...reviewers])],
+      memberIds: [...members],
     });
     reset();
     onClose();
@@ -85,8 +83,8 @@ export function CreateProjectDialog({
             New project
           </DialogTitle>
           <DialogDescription>
-            Name your project and add its leads &amp; reviewers. Your project
-            gets a unique icon automatically.
+            Name your project and optionally add teammates. You&apos;ll be its
+            owner — set everyone&apos;s role afterwards on the Team page.
           </DialogDescription>
         </DialogHeader>
 
@@ -125,14 +123,9 @@ export function CreateProjectDialog({
           </div>
 
           <MemberPicker
-            label="Leads"
-            selected={leads}
-            onToggle={(id) => toggle(leads, setLeads, id)}
-          />
-          <MemberPicker
-            label="Reviewers"
-            selected={reviewers}
-            onToggle={(id) => toggle(reviewers, setReviewers, id)}
+            label="Members"
+            selected={members}
+            onToggle={(id) => toggle(members, setMembers, id)}
           />
         </div>
 
@@ -165,7 +158,7 @@ function MemberPicker({
   selected: Set<string>;
   onToggle: (id: string) => void;
 }) {
-  const { members } = useWorkspace();
+  const { members, me } = useWorkspace();
   return (
     <div>
       <label className="mb-1.5 flex items-center justify-between text-[12px] font-semibold text-ink-soft">
@@ -174,7 +167,10 @@ function MemberPicker({
       </label>
       <div className="flex flex-wrap gap-1.5">
         {members
-          .filter((m) => m.status === "active")
+          .filter(
+            (m) =>
+              m.status === "active" && m.id !== me.id && m.userId !== me.id,
+          )
           .map((m) => {
           const on = selected.has(m.id);
           return (

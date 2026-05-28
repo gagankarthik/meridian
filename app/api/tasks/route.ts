@@ -2,6 +2,7 @@ import { key, putItem, queryPartition, stripKeys } from "@/lib/ddb";
 import {
   canWrite,
   eligibleAssigneeIds,
+  getProjectRole,
   requireWorkspace,
 } from "@/lib/workspace-server";
 
@@ -28,6 +29,20 @@ export async function POST(request: Request) {
   if (!title) return Response.json({ error: "title is required" }, { status: 400 });
   if (!body.projectId) {
     return Response.json({ error: "projectId is required" }, { status: 400 });
+  }
+
+  // Per-project gate: viewers (and people with no access) can't create tasks.
+  const pr = await getProjectRole(
+    r.ctx.workspaceId,
+    String(body.projectId),
+    r.ctx.userId,
+    r.ctx.role,
+  );
+  if (!pr || pr === "Viewer") {
+    return Response.json(
+      { error: "Forbidden — you don't have edit access to this project" },
+      { status: 403 },
+    );
   }
 
   // Honor a safe client-provided id so the optimistic id matches the persisted

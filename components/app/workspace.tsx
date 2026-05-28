@@ -26,6 +26,7 @@ import {
   type Notification,
   type Priority,
   type Project,
+  type ProjectRole,
   type SubTask,
   type Task,
 } from "@/lib/app-data";
@@ -44,7 +45,13 @@ export function mapRole(role: string | undefined): Role {
 }
 
 export type Column = { id: string; name: string };
-export type WsAction = "create" | "edit" | "delete" | "assign" | "manage";
+export type WsAction =
+  | "create"
+  | "edit"
+  | "delete"
+  | "assign"
+  | "manage"
+  | "deleteProject";
 
 export type NewTask = {
   title: string;
@@ -67,9 +74,10 @@ export type NewProject = {
   key: string;
   color: string;
   description?: string;
-  leadIds: string[];
-  reviewerIds: string[];
-  memberIds: string[];
+  /** Teammates to add up front; the creator is always the owner. */
+  adminIds?: string[];
+  memberIds?: string[];
+  viewerIds?: string[];
 };
 
 type WorkspaceCtx = {
@@ -121,7 +129,14 @@ type WorkspaceCtx = {
   reorderColumns: (projectId: string, orderedIds: string[]) => void;
   role: Role;
   setRole: (r: Role) => void;
+  /** Global/workspace-level permission gate (workspace settings, team page). */
   can: (action: WsAction) => boolean;
+  /** Any member who isn't a workspace viewer may create a project (and own it). */
+  canCreateProject: boolean;
+  /** The signed-in user's role on a specific project (Owner for super-admins). */
+  myProjectRole: (projectId: string) => ProjectRole | null;
+  /** Per-project permission gate, driven by the user's role on that project. */
+  canInProject: (projectId: string, action: WsAction) => boolean;
   addTask: (t: NewTask) => Task;
   updateTask: (id: string, patch: Partial<Task>) => void;
   deleteTask: (id: string) => void;
@@ -309,6 +324,47 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
   const can = (action: WsAction) =>
     role === "admin" ? true : role === "editor" ? action !== "manage" : false;
 
+  // The signed-in user's real member record id (may differ from their Cognito
+  // sub for invited members, whose record is keyed by an invite id).
+  const myMemberId = () =>
+    members.find((m) => m.id === meId || m.userId === meId)?.id ?? meId;
+
+  const myProjectRole = (projectId: string): ProjectRole | null => {
+    // The workspace owner/admin is a super-admin with full control of every
+    // project, regardless of the project's own team.
+    if (role === "admin") return "Owner";
+    const p = projects.find((x) => x.id === projectId);
+    if (!p) return null;
+    const mid = myMemberId();
+    if (p.ownerId === mid) return "Owner";
+    if (p.adminIds.includes(mid)) return "Admin";
+    if (p.memberIds.includes(mid)) return "Member";
+    if (p.viewerIds.includes(mid)) return "Viewer";
+    // Access granted only via the personal access list (Team page) is Member.
+    if (members.find((m) => m.id === mid)?.projects?.includes(projectId))
+      return "Member";
+    return null;
+  };
+
+  // Per-project permission matrix:
+  //   Owner  → everything, including deleting the project
+  //   Admin  → everything except deleting the project
+  //   Member → work on tasks; can't manage settings/team or delete
+  //   Viewer → read-only
+  const canInProject = (projectId: string, action: WsAction): boolean => {
+    const pr = myProjectRole(projectId);
+    switch (pr) {
+      case "Owner":
+        return true;
+      case "Admin":
+        return action !== "deleteProject";
+      case "Member":
+        return action !== "manage" && action !== "deleteProject";
+      default:
+        return false;
+    }
+  };
+
   /* Best-effort persistence — optimistic UI updates already happened. */
   const persist = (input: string, init: RequestInit) => {
     if (live) void authedFetch(input, init).catch(() => {});
@@ -468,13 +524,14 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
       });
     },
     addProject: (p) => {
-      // The creator always belongs to their own project: added as a member, and
-      // as the lead when none was explicitly chosen — so they get full access.
-      // Use their real MEMBER id (which may differ from their Cognito sub for
-      // invited users) so the project's team arrays match how members are keyed.
-      const creatorId =
-        members.find((m) => m.id === meId || m.userId === meId)?.id ?? meId;
-      const leadIds = p.leadIds.length ? p.leadIds : [creatorId];
+      // The creator is the project's owner — full access, no need to grant
+      // themselves anything. Use their real MEMBER id (which may differ from
+      // their Cognito sub for invited users) so the project's team arrays match
+      // how members are keyed. Other teammates are added with the chosen role,
+      // with the owner removed from those arrays so roles stay exclusive.
+      const ownerId = myMemberId();
+      const without = (ids: string[] = []) =>
+        ids.filter((x) => x && x !== ownerId);
       const project: Project = {
         id: nextId("p"),
         name: p.name.trim() || "Untitled project",
@@ -483,19 +540,30 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
         progress: 0,
         status: "On track",
         open: 0,
-        leadIds,
-        reviewerIds: p.reviewerIds,
-        memberIds: Array.from(
-          new Set([creatorId, ...p.memberIds, ...leadIds, ...p.reviewerIds]),
-        ),
+        ownerId,
+        adminIds: without(p.adminIds),
+        memberIds: without(p.memberIds),
+        viewerIds: without(p.viewerIds),
         ...(p.description ? { description: p.description } : {}),
       };
       setProjects((ps) => [...ps, project]);
-      // Reflect the new project in the creator's own access list for this session.
+      // Reflect the new project in every added member's access list (incl. the
+      // owner) for this session, so it shows immediately.
+      const onProject = new Set([
+        ownerId,
+        ...project.adminIds,
+        ...project.memberIds,
+        ...project.viewerIds,
+      ]);
       setMembers((ms) =>
         ms.map((m) =>
-          m.id === creatorId
-            ? { ...m, projects: Array.from(new Set([...(m.projects ?? []), project.id])) }
+          onProject.has(m.id)
+            ? {
+                ...m,
+                projects: Array.from(
+                  new Set([...(m.projects ?? []), project.id]),
+                ),
+              }
             : m,
         ),
       );
@@ -507,6 +575,19 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
     },
     deleteProject: (id) => {
       setProjects((ps) => ps.filter((x) => x.id !== id));
+      // Scrub every dangling reference so nothing points at a project that no
+      // longer exists: members' personal access lists, and the project's tasks,
+      // approvals, and attachments (the server mirrors this cleanup).
+      setMembers((ms) =>
+        ms.map((m) =>
+          m.projects?.includes(id)
+            ? { ...m, projects: m.projects.filter((p) => p !== id) }
+            : m,
+        ),
+      );
+      setTasks((ts) => ts.filter((t) => t.projectId !== id));
+      setApprovals((a) => a.filter((x) => x.projectId !== id));
+      setAttachments((a) => a.filter((x) => x.projectId !== id));
       persist(`/api/projects/${id}`, { method: "DELETE" });
     },
     columns,
@@ -560,6 +641,9 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
     role,
     setRole,
     can,
+    canCreateProject: role !== "viewer",
+    myProjectRole,
+    canInProject,
     addTask: (t) => {
       const task: Task = {
         id: nextId("t"),

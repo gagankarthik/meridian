@@ -5,7 +5,7 @@ import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   Check,
-  Crown,
+  Eye,
   Mail,
   MoreHorizontal,
   Search,
@@ -36,12 +36,15 @@ import { authedFetch } from "@/lib/api-client";
 import { cn } from "@/lib/utils";
 
 const ROLE_BADGE: Record<ProjectRole, string> = {
-  Lead: "border-signal/30 bg-signal-soft text-signal",
-  Reviewer: "border-[#1d9aaa]/30 bg-[#1d9aaa]/10 text-[#1d9aaa]",
+  Owner: "border-[#e2a200]/40 bg-[#e2a200]/10 text-[#a06a00] dark:text-[#e2a200]",
+  Admin: "border-signal/30 bg-signal-soft text-signal",
   Member: "border-line bg-secondary text-ink-muted",
+  Viewer: "border-[#1d9aaa]/30 bg-[#1d9aaa]/10 text-[#1d9aaa]",
 };
 
-const PROJECT_ROLES: ProjectRole[] = ["Member", "Reviewer", "Lead"];
+// Roles an owner/admin can assign to others (you can't hand out Owner — that's
+// the creator; ownership stays put).
+const ASSIGNABLE_ROLES: ProjectRole[] = ["Admin", "Member", "Viewer"];
 const HUES = ["#2563eb", "#2f6df0", "#22a06b", "#1d9aaa", "#d9842b", "#7a3ff0"];
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
@@ -65,8 +68,8 @@ export function ProjectTeamClient({ projectId }: { projectId: string }) {
   const [reassignFor, setReassignFor] = useState<Member | null>(null);
   const [removeFor, setRemoveFor] = useState<Member | null>(null);
 
-  // Only admins (or those who can manage) change roles / remove members.
-  const canManage = ws.can("manage");
+  // Only owners/admins of THIS project change roles / remove members.
+  const canManage = ws.canInProject(projectId, "manage");
 
   // Project-scoped invites (local; augments the derived member list).
   const [inviteOpen, setInviteOpen] = useState(false);
@@ -86,7 +89,7 @@ export function ProjectTeamClient({ projectId }: { projectId: string }) {
       .filter((m): m is NonNullable<typeof m> => Boolean(m))
       .map((m) => ({
         member: m,
-        role: projectRole(projectId, m.id),
+        role: projectRole(projectId, m.id) ?? "Member",
         tasks: ws.tasks.filter(
           (t) => t.projectId === projectId && t.assigneeIds.includes(m.id),
         ).length,
@@ -107,8 +110,8 @@ export function ProjectTeamClient({ projectId }: { projectId: string }) {
     [rows, invites, projectId],
   );
 
-  const leads = allRows.filter((r) => r.role === "Lead").length;
-  const reviewers = allRows.filter((r) => r.role === "Reviewer").length;
+  const admins = allRows.filter((r) => r.role === "Admin").length;
+  const viewers = allRows.filter((r) => r.role === "Viewer").length;
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -122,15 +125,25 @@ export function ProjectTeamClient({ projectId }: { projectId: string }) {
     });
   }, [allRows, search, roleFilter]);
 
-  /* ---- member actions (admin-gated where destructive) ---- */
+  /* ---- member actions (owner/admin-gated where destructive) ---- */
   function setMemberRole(memberId: string, role: ProjectRole) {
-    if (!project) return;
-    const leadIds = project.leadIds.filter((x) => x !== memberId);
-    const reviewerIds = project.reviewerIds.filter((x) => x !== memberId);
-    const memberIds = Array.from(new Set([...project.memberIds, memberId]));
-    if (role === "Lead") leadIds.push(memberId);
-    if (role === "Reviewer") reviewerIds.push(memberId);
-    ws.updateProject(project.id, { leadIds, reviewerIds, memberIds });
+    if (!project || memberId === project.ownerId) return; // ownership is fixed
+    // Roles are mutually exclusive: drop the member from every array, then add
+    // them to the one for their new role (Member needs no array beyond access).
+    const adminIds = project.adminIds.filter((x) => x !== memberId);
+    const memberIds = project.memberIds.filter((x) => x !== memberId);
+    const viewerIds = project.viewerIds.filter((x) => x !== memberId);
+    if (role === "Admin") adminIds.push(memberId);
+    else if (role === "Viewer") viewerIds.push(memberId);
+    else memberIds.push(memberId);
+    ws.updateProject(project.id, { adminIds, memberIds, viewerIds });
+    // Granting a role also grants access — keep the personal list in sync.
+    const member = ws.members.find((m) => m.id === memberId);
+    if (member && !member.projects?.includes(project.id)) {
+      ws.updateMember(memberId, {
+        projects: [...(member.projects ?? []), project.id],
+      });
+    }
     // Keep any local invite row in sync so the badge updates immediately.
     setInvites((list) =>
       list.map((iv) =>
@@ -141,12 +154,12 @@ export function ProjectTeamClient({ projectId }: { projectId: string }) {
   }
 
   function removeFromProject(memberId: string) {
-    if (project) {
+    if (project && memberId !== project.ownerId) {
       // Take them off THIS project's team only…
       ws.updateProject(project.id, {
-        leadIds: project.leadIds.filter((x) => x !== memberId),
-        reviewerIds: project.reviewerIds.filter((x) => x !== memberId),
+        adminIds: project.adminIds.filter((x) => x !== memberId),
         memberIds: project.memberIds.filter((x) => x !== memberId),
+        viewerIds: project.viewerIds.filter((x) => x !== memberId),
       });
       // …and revoke this project from their personal access list, so removal is
       // complete. They REMAIN a workspace member (still on the Team page) —
@@ -319,15 +332,15 @@ export function ProjectTeamClient({ projectId }: { projectId: string }) {
           tint="text-signal"
         />
         <StatTile
-          icon={Crown}
-          label="Leads"
-          value={leads}
+          icon={ShieldCheck}
+          label="Admins"
+          value={admins}
           tint="text-[#e2a200]"
         />
         <StatTile
-          icon={ShieldCheck}
-          label="Reviewers"
-          value={reviewers}
+          icon={Eye}
+          label="Viewers"
+          value={viewers}
           tint="text-[#1d9aaa]"
         />
       </div>
@@ -349,7 +362,7 @@ export function ProjectTeamClient({ projectId }: { projectId: string }) {
           )}
         </div>
         <div className="flex shrink-0 gap-1 rounded-xl border border-line bg-card p-1 shadow-card">
-          {(["all", "Lead", "Reviewer", "Member"] as const).map((r) => (
+          {(["all", "Owner", "Admin", "Member", "Viewer"] as const).map((r) => (
             <button
               key={r}
               type="button"
@@ -445,7 +458,7 @@ export function ProjectTeamClient({ projectId }: { projectId: string }) {
                             router.push(`/app/team/${m.id}`);
                           }}
                         />
-                        {ws.can("assign") && (
+                        {ws.canInProject(projectId, "assign") && (
                           <MenuItem
                             label="Reassign tasks"
                             onClick={() => {
@@ -454,13 +467,13 @@ export function ProjectTeamClient({ projectId }: { projectId: string }) {
                             }}
                           />
                         )}
-                        {canManage && (
+                        {canManage && role !== "Owner" && (
                           <>
                             <div className="my-1.5 border-t border-line" />
                             <p className="px-3 pb-1 text-[10px] font-bold uppercase tracking-wide text-ink-soft">
                               Set project role
                             </p>
-                            {PROJECT_ROLES.filter((r) => r !== role).map((r) => (
+                            {ASSIGNABLE_ROLES.filter((r) => r !== role).map((r) => (
                               <MenuItem
                                 key={r}
                                 label={`Make ${r}`}
@@ -569,7 +582,7 @@ export function ProjectTeamClient({ projectId }: { projectId: string }) {
                 Project role
               </label>
               <div className="flex gap-1 rounded-xl border border-line bg-paper-raised p-1">
-                {PROJECT_ROLES.map((r) => (
+                {ASSIGNABLE_ROLES.map((r) => (
                   <button
                     key={r}
                     type="button"
@@ -586,10 +599,10 @@ export function ProjectTeamClient({ projectId }: { projectId: string }) {
                 ))}
               </div>
               <p className="mt-1.5 text-[11.5px] text-ink-soft">
-                {inviteRole === "Lead"
-                  ? "Leads own delivery and can manage the project."
-                  : inviteRole === "Reviewer"
-                    ? "Reviewers approve work and sign off on changes."
+                {inviteRole === "Admin"
+                  ? "Admins manage the project and its team (but can't delete it)."
+                  : inviteRole === "Viewer"
+                    ? "Viewers have read-only access — they can't change anything."
                     : "Members collaborate on tasks within the project."}
               </p>
             </div>

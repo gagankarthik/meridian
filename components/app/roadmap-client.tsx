@@ -313,7 +313,7 @@ export function RoadmapClient() {
 
             {/* Swimlane rows */}
             {lanes.map((p) => {
-              const lead = p.leadIds[0] ? memberById(p.leadIds[0]) : undefined;
+              const lead = p.ownerId ? memberById(p.ownerId) : undefined;
               const geo = barGeometry(p, quarters);
               const isActive = p.id === activeId;
               return (
@@ -472,8 +472,8 @@ function ProjectSheet({
             </SheetHeader>
 
             <div className="flex flex-col gap-5 overflow-y-auto p-5">
-              <DetailRow label="Lead">
-                <LeadCell leadIds={project.leadIds} />
+              <DetailRow label="Owner">
+                <LeadCell ownerId={project.ownerId} />
               </DetailRow>
 
               <DetailRow label="Schedule">
@@ -563,8 +563,8 @@ function DetailRow({
   );
 }
 
-function LeadCell({ leadIds }: { leadIds: string[] }) {
-  const lead = leadIds[0] ? memberById(leadIds[0]) : undefined;
+function LeadCell({ ownerId }: { ownerId: string }) {
+  const lead = ownerId ? memberById(ownerId) : undefined;
   if (!lead) {
     return <span className="text-[13px] text-ink-soft">Unassigned</span>;
   }

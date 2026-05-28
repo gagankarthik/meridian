@@ -458,8 +458,8 @@ function PeoplePanel({
   project: Project;
   memberIds: string[];
 }) {
-  const leads = project.leadIds;
-  const reviewers = project.reviewerIds.filter((id) => !leads.includes(id));
+  const owner = project.ownerId;
+  const admins = project.adminIds.filter((id) => id !== owner);
 
   return (
     <Panel
@@ -472,16 +472,14 @@ function PeoplePanel({
       }
     >
       <div className="space-y-5">
-        {/* leads & reviewers */}
+        {/* owner & admins */}
         <div className="space-y-2.5">
           <p className="text-[11px] font-semibold tracking-wider uppercase text-ink-soft">
-            Leads &amp; reviewers
+            Owner &amp; admins
           </p>
-          {leads.map((id) => (
-            <PersonRow key={id} id={id} kind="Lead" />
-          ))}
-          {reviewers.map((id) => (
-            <PersonRow key={id} id={id} kind="Reviewer" />
+          {owner && <PersonRow key={owner} id={owner} kind="Owner" />}
+          {admins.map((id) => (
+            <PersonRow key={id} id={id} kind="Admin" />
           ))}
         </div>
 
@@ -507,10 +505,10 @@ function PeoplePanel({
   );
 }
 
-function PersonRow({ id, kind }: { id: string; kind: "Lead" | "Reviewer" }) {
+function PersonRow({ id, kind }: { id: string; kind: "Owner" | "Admin" }) {
   const m = memberById(id);
   if (!m) return null;
-  const isLead = kind === "Lead";
+  const isLead = kind === "Owner";
   return (
     <div className="flex items-center gap-3 rounded-lg px-1.5 py-1.5 transition-colors hover:bg-paper-raised">
       <MemberAvatar member={m} size={30} />

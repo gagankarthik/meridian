@@ -86,9 +86,10 @@ export async function POST(request: Request) {
       progress: 0,
       status: "On track",
       open: 0,
-      leadIds: [user.sub],
-      reviewerIds: [],
-      memberIds: [user.sub],
+      ownerId: user.sub,
+      adminIds: [],
+      memberIds: [],
+      viewerIds: [],
     });
   }
 

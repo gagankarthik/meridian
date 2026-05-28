@@ -111,14 +111,57 @@ export async function resolveMemberId(
   return sub;
 }
 
+export type ServerProjectRole = "Owner" | "Admin" | "Member" | "Viewer";
+
+/**
+ * Normalize a raw project item's role membership into the
+ * owner/admin/member/viewer shape, tolerating legacy items that still carry the
+ * old `leadIds`/`reviewerIds` fields (lead[0] → owner, the rest → admins,
+ * reviewers + members → members). The single place that understands both
+ * shapes, so readers don't each reinvent the migration.
+ */
+export function projectRoles(project: Record<string, unknown>): {
+  ownerId: string;
+  adminIds: string[];
+  memberIds: string[];
+  viewerIds: string[];
+} {
+  const arr = (v: unknown): string[] =>
+    Array.isArray(v)
+      ? v.filter((x): x is string => typeof x === "string" && Boolean(x))
+      : [];
+
+  if (typeof project.ownerId === "string" && project.ownerId) {
+    return {
+      ownerId: project.ownerId,
+      adminIds: arr(project.adminIds),
+      memberIds: arr(project.memberIds),
+      viewerIds: arr(project.viewerIds),
+    };
+  }
+
+  // Legacy shape.
+  const leads = arr(project.leadIds);
+  const ownerId = leads[0] ?? arr(project.memberIds)[0] ?? "";
+  const adminIds = leads.slice(1);
+  const rest = new Set<string>([
+    ...arr(project.reviewerIds),
+    ...arr(project.memberIds),
+  ]);
+  rest.delete(ownerId);
+  for (const a of adminIds) rest.delete(a);
+  return { ownerId, adminIds, memberIds: Array.from(rest), viewerIds: [] };
+}
+
 /**
  * Compute the set of member ids that may be assigned to / review tasks on a
  * given project (defense-in-depth: the UI restricts the pickers, but write
  * routes must enforce it too). The eligible set is:
- *   - the project's leadIds ∪ reviewerIds ∪ memberIds, plus
- *   - any member whose `projects` array includes the projectId — for those we
- *     add BOTH the member's `id` and its linked `userId` (a task may reference
- *     either, since invited members are keyed by an invite id ≠ their sub).
+ *   - the project's owner ∪ admins ∪ members (viewers are read-only), plus
+ *   - any non-viewer member whose `projects` array includes the projectId —
+ *     for those we add BOTH the member's `id` and its linked `userId` (a task
+ *     may reference either, since invited members are keyed by an invite id ≠
+ *     their sub).
  *
  * Reads the whole workspace partition once; callers should do this at most once
  * per write. Returns an empty set if the project can't be found.
@@ -136,25 +179,66 @@ export async function eligibleAssigneeIds(
   );
   if (!project) return eligible;
 
-  for (const field of ["leadIds", "reviewerIds", "memberIds"] as const) {
-    const arr = project[field];
-    if (Array.isArray(arr)) {
-      for (const v of arr) if (typeof v === "string" && v) eligible.add(v);
-    }
-  }
+  const roles = projectRoles(project);
+  if (roles.ownerId) eligible.add(roles.ownerId);
+  for (const id of [...roles.adminIds, ...roles.memberIds]) eligible.add(id);
+  const viewers = new Set(roles.viewerIds);
 
   for (const item of items) {
     if (typeof item.SK !== "string" || !(item.SK as string).startsWith("MEMBER#"))
       continue;
     const projects = item.projects;
     if (Array.isArray(projects) && projects.includes(projectId)) {
-      if (typeof item.id === "string" && item.id) eligible.add(item.id);
-      if (typeof item.userId === "string" && item.userId)
-        eligible.add(item.userId);
+      const ids = [item.id, item.userId].filter(
+        (x): x is string => typeof x === "string" && Boolean(x),
+      );
+      if (ids.some((id) => viewers.has(id))) continue; // viewers stay read-only
+      for (const id of ids) eligible.add(id);
     }
   }
 
   return eligible;
+}
+
+/**
+ * The caller's role on a specific project, enforced server-side. The workspace
+ * owner/admin is a super-admin (treated as project Owner everywhere). Otherwise
+ * we resolve the caller's member id (which may be an invite id ≠ their sub) and
+ * look it up in the project's role arrays; a project on their personal access
+ * list counts as Member. Returns null when they have no access.
+ */
+export async function getProjectRole(
+  workspaceId: string,
+  projectId: string,
+  userId: string,
+  workspaceRole: string,
+): Promise<ServerProjectRole | null> {
+  if (["owner", "admin"].includes((workspaceRole ?? "").toLowerCase()))
+    return "Owner";
+
+  const items = await queryPartition(`WS#${workspaceId}`);
+  const project = items.find(
+    (i) => typeof i.SK === "string" && (i.SK as string) === `PROJECT#${projectId}`,
+  );
+  if (!project) return null;
+  const roles = projectRoles(project);
+
+  const member = items.find(
+    (i) =>
+      typeof i.SK === "string" &&
+      (i.SK as string).startsWith("MEMBER#") &&
+      (i.userId === userId || i.id === userId),
+  );
+  const ids = new Set<string>([userId]);
+  if (member && typeof member.id === "string") ids.add(member.id);
+
+  if (ids.has(roles.ownerId)) return "Owner";
+  if (roles.adminIds.some((x) => ids.has(x))) return "Admin";
+  if (roles.memberIds.some((x) => ids.has(x))) return "Member";
+  if (roles.viewerIds.some((x) => ids.has(x))) return "Viewer";
+  if (Array.isArray(member?.projects) && member!.projects.includes(projectId))
+    return "Member";
+  return null;
 }
 
 /**

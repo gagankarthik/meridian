@@ -2,6 +2,7 @@ import { deleteItem, getItem, key, putItem, stripKeys } from "@/lib/ddb";
 import {
   canWrite,
   eligibleAssigneeIds,
+  getProjectRole,
   requireWorkspace,
 } from "@/lib/workspace-server";
 
@@ -18,6 +19,20 @@ export async function PATCH(
 
   const existing = await getItem(key.task(r.ctx.workspaceId, id));
   if (!existing) return Response.json({ error: "Not found" }, { status: 404 });
+
+  // Per-project gate: viewers (and people with no access) can't edit tasks.
+  const pr = await getProjectRole(
+    r.ctx.workspaceId,
+    String(existing.projectId ?? ""),
+    r.ctx.userId,
+    r.ctx.role,
+  );
+  if (!pr || pr === "Viewer") {
+    return Response.json(
+      { error: "Forbidden — you don't have edit access to this project" },
+      { status: 403 },
+    );
+  }
 
   const patch = await request.json().catch(() => ({}));
   delete patch.PK;
@@ -73,6 +88,22 @@ export async function DELETE(
     return Response.json({ error: "Forbidden — your role is view-only" }, { status: 403 });
   }
   const { id } = await ctx.params;
+
+  const existing = await getItem(key.task(r.ctx.workspaceId, id));
+  if (existing) {
+    const pr = await getProjectRole(
+      r.ctx.workspaceId,
+      String(existing.projectId ?? ""),
+      r.ctx.userId,
+      r.ctx.role,
+    );
+    if (!pr || pr === "Viewer") {
+      return Response.json(
+        { error: "Forbidden — you don't have edit access to this project" },
+        { status: 403 },
+      );
+    }
+  }
   await deleteItem(key.task(r.ctx.workspaceId, id));
   return Response.json({ ok: true });
 }

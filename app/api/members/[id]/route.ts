@@ -4,6 +4,7 @@ import {
   key,
   putItem,
   queryByEmail,
+  queryPartition,
   stripKeys,
   withEmailIndex,
 } from "@/lib/ddb";
@@ -116,5 +117,39 @@ export async function DELETE(
     );
   }
   await deleteItem(key.member(r.ctx.workspaceId, id));
+
+  // Scrub the removed member from every project's team so no role array points
+  // at someone who's no longer in the workspace. A project they OWNED is handed
+  // to the workspace owner so it never becomes ownerless.
+  const items = await queryPartition(`WS#${r.ctx.workspaceId}`);
+  const wsOwner = String(
+    items.find((i) => i.SK === "META")?.ownerId ?? "",
+  );
+  const ids = new Set<string>(
+    [id, target?.id, target?.userId].filter(
+      (x): x is string => typeof x === "string" && Boolean(x),
+    ),
+  );
+  await Promise.all(
+    items
+      .filter((it) => String(it.SK).startsWith("PROJECT#"))
+      .map((p) => {
+        let changed = false;
+        const next: Record<string, unknown> = { ...p };
+        for (const f of ["adminIds", "memberIds", "viewerIds"] as const) {
+          if (Array.isArray(p[f]) && (p[f] as string[]).some((x) => ids.has(x))) {
+            next[f] = (p[f] as string[]).filter((x) => !ids.has(x));
+            changed = true;
+          }
+        }
+        if (ids.has(String(p.ownerId))) {
+          next.ownerId = wsOwner;
+          changed = true;
+        }
+        return changed ? putItem(next) : null;
+      })
+      .filter(Boolean) as Promise<void>[],
+  );
+
   return Response.json({ ok: true });
 }

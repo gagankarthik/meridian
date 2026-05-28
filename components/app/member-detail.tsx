@@ -26,10 +26,11 @@ import { Avatar, ProjectAvatar, StatCard, StatusChip } from "@/components/app/wi
 import { cn } from "@/lib/utils";
 
 const ROLE_BADGE: Record<ProjectRole, string> = {
-  Lead: "border-signal/30 bg-signal-soft text-signal",
-  Reviewer:
+  Owner:
     "border-amber-600/30 bg-amber-500/10 text-amber-700 dark:border-amber-400/30 dark:bg-amber-400/10 dark:text-amber-300",
+  Admin: "border-signal/30 bg-signal-soft text-signal",
   Member: "border-line bg-secondary text-ink-muted",
+  Viewer: "border-[#1d9aaa]/30 bg-[#1d9aaa]/10 text-[#1d9aaa]",
 };
 
 export function MemberDetail({ id }: { id: string }) {
@@ -114,7 +115,13 @@ export function MemberDetail({ id }: { id: string }) {
   }
 
   // Projects this member belongs to, driven by local access state.
-  const memberProjects = ws.projects.filter((p) => access.has(p.id));
+  // Projects the member belongs to — by their personal access list OR by being
+  // on a project's team (owner/admin/member/viewer), so ownership and role
+  // grants both surface here even if the access list hasn't caught up.
+  const memberId = member?.id ?? id;
+  const memberProjects = ws.projects.filter(
+    (p) => access.has(p.id) || projectRole(p.id, memberId) !== null,
+  );
 
   const taskCountInProject = (pid: string) =>
     assigned.filter((t) => t.projectId === pid).length;
@@ -207,7 +214,7 @@ export function MemberDetail({ id }: { id: string }) {
         ) : (
           <div className="divide-y divide-line">
             {memberProjects.map((p) => {
-              const role = projectRole(p.id, member.id);
+              const role = projectRole(p.id, member.id) ?? "Member";
               const count = taskCountInProject(p.id);
               return (
                 <div

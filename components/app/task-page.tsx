@@ -80,9 +80,9 @@ function TaskBody({ task }: { task: Task }) {
   const router = useRouter();
   const detail = getTaskDetail(task);
 
-  const canEdit = ws.can("edit");
-  const canAssign = ws.can("assign");
-  const canDelete = ws.can("delete");
+  const canEdit = ws.canInProject(task.projectId, "edit");
+  const canAssign = ws.canInProject(task.projectId, "assign");
+  const canDelete = ws.canInProject(task.projectId, "delete");
 
   // All local state seeded via useState initializers — TaskBody is keyed by
   // task.id, so this reseeds whenever a different task loads. No effect sync.

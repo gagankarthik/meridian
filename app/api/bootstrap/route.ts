@@ -1,7 +1,7 @@
 import { ddbConfigured, key, queryPartition, getItem } from "@/lib/ddb";
 import { logoDisplayUrl } from "@/lib/s3";
 import { getServerUser } from "@/lib/server-user";
-import { resolveWorkspace } from "@/lib/workspace-server";
+import { projectRoles, resolveWorkspace } from "@/lib/workspace-server";
 
 /** Strip internal single-table keys before sending to the client. */
 function clean(item: Record<string, unknown>) {
@@ -69,7 +69,14 @@ export async function GET(request: Request) {
   for (const it of items) {
     const sk = String(it.SK);
     if (sk.startsWith("MEMBER#")) members.push(clean(it));
-    else if (sk.startsWith("PROJECT#")) projects.push(clean(it));
+    else if (sk.startsWith("PROJECT#")) {
+      // Normalize to the owner/admin/member/viewer shape (handles legacy
+      // lead/reviewer items) so the client always gets the current shape.
+      const c = clean(it);
+      delete c.leadIds;
+      delete c.reviewerIds;
+      projects.push({ ...c, ...projectRoles(it) });
+    }
     else if (sk.startsWith("TASK#")) tasks.push(clean(it));
     else if (sk.startsWith("COLUMN#")) columns.push(clean(it));
     else if (sk.startsWith("ACTIVITY#")) activity.push(clean(it));
@@ -123,9 +130,10 @@ export async function GET(request: Request) {
     visibleProjects = projects.filter(
       (p) =>
         granted.has(String(p.id)) ||
-        onProject(p.leadIds) ||
-        onProject(p.reviewerIds) ||
-        onProject(p.memberIds),
+        myIds.includes(String(p.ownerId)) ||
+        onProject(p.adminIds) ||
+        onProject(p.memberIds) ||
+        onProject(p.viewerIds),
     );
     const visibleIds = new Set(visibleProjects.map((p) => String(p.id)));
     visibleTasks = tasks.filter((t) => visibleIds.has(String(t.projectId)));

@@ -111,7 +111,7 @@ export function ProjectViewHeader({
               )}
             </div>
           )}
-          {ws.can("create") && (
+          {ws.canInProject(projectId, "create") && (
             <Link
               href={`/app/tasks/new${q}`}
               className="inline-flex items-center gap-1.5 rounded-xl bg-signal px-3 py-1.5 text-[13px] font-bold text-white transition-colors hover:bg-signal-strong"

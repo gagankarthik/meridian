@@ -37,7 +37,6 @@ import { cn } from "@/lib/utils";
 const HUES = ["#2563eb", "#2f6df0", "#1f9d6b", "#1d9aaa", "#d9842b", "#1d9aaa"];
 const ROLES: Role[] = ["Member", "Admin", "Viewer"];
 const INVITE_ROLES: Role[] = ["Member", "Admin", "Viewer"];
-const ROLE_RANK: Record<string, number> = { Admin: 3, Member: 2, Viewer: 1 };
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
@@ -156,18 +155,16 @@ export function TeamClient() {
     }
 
     const selected = Array.from(projects);
-    const topRole: Role = selected.reduce<Role>((best, pid) => {
-      const r = projectRoles[pid] ?? "Member";
-      return ROLE_RANK[r] > ROLE_RANK[best] ? r : best;
-    }, "Member");
-
+    // Invitees join as workspace "Member"; their real capability per project
+    // comes from the project role chosen below (Member/Admin/Viewer). Only the
+    // workspace owner is a super-admin.
     const created: Member[] = pending.map((email, i) => {
       const local = email.split("@")[0];
       return {
         id: `u${Date.now()}${i}`,
         name: nameFromEmail(email),
         email,
-        role: topRole,
+        role: "Member",
         initials: local.slice(0, 2).toUpperCase(),
         status: "invited",
         hue: HUES[(members.length + i) % HUES.length],
