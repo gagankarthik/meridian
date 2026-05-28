@@ -8,20 +8,31 @@ import {
   ArrowLeft,
   Check,
   ChevronDown,
+  ChevronRight,
+  Download,
+  FileText,
   Flag,
+  MoreHorizontal,
+  Paperclip,
   Plus,
+  Search,
   Send,
   Trash2,
   X,
 } from "lucide-react";
+import { authedFetch } from "@/lib/api-client";
 import {
   COLUMN_LABEL,
+  eligibleMembersFor,
   getTaskDetail,
   memberById,
   priorityMeta,
   projectById,
+  relativeTime,
   subtaskKey,
   taskKey,
+  type Comment,
+  type Member,
   type Priority,
   type SubTask,
   type Task,
@@ -31,8 +42,6 @@ import { AvatarStack, MemberAvatar, ProgressBar } from "@/components/app/widgets
 import { cn } from "@/lib/utils";
 
 const PRIORITIES: Priority[] = ["Low", "Medium", "High", "Urgent"];
-
-type Comment = { id: string; who: string; text: string; time: string };
 
 export function TaskPage({ id }: { id: string }) {
   const ws = useWorkspace();
@@ -83,35 +92,29 @@ function TaskBody({ task }: { task: Task }) {
   const [title, setTitle] = useState(() => task.title);
   const [description, setDescription] = useState(() => detail.description);
   const [newSub, setNewSub] = useState("");
-  const [comments, setComments] = useState<Comment[]>(() => [
-    {
-      id: "c1",
-      who: detail.reporterId,
-      text: `Kicking this off under the ${task.tag} workstream — scope is captured above.`,
-      time: "5h ago",
-    },
-    {
-      id: "c2",
-      who: task.assigneeId,
-      text: `Picked it up. Moving to ${COLUMN_LABEL[task.column] ?? task.column} once the first sub-task lands.`,
-      time: "2h ago",
-    },
-    {
-      id: "c3",
-      who: detail.reporterId,
-      text: "Looks good — let's keep the checklist current and loop in review before sign-off.",
-      time: "40m ago",
-    },
-  ]);
+  const [comments, setComments] = useState<Comment[]>(() =>
+    detail.comments.map((c) => ({ ...c })),
+  );
   const [draft, setDraft] = useState("");
   const [assigneeIds, setAssigneeIds] = useState<string[]>(() =>
     task.assigneeIds.length ? [...task.assigneeIds] : [task.assigneeId],
   );
+  const [reviewerId, setReviewerId] = useState(() => detail.reviewerId);
+  const [confirmOpen, setConfirmOpen] = useState(false);
+  const [actionsOpen, setActionsOpen] = useState(false);
 
   const reporter = memberById(detail.reporterId);
-  const reviewer = memberById(detail.reviewerId);
+  const reviewer = memberById(reviewerId);
   const project = projectById(task.projectId);
   const pr = priorityMeta[task.priority];
+  // Strictly project-confined: ONLY members on this project's team can be an
+  // assignee or reviewer — never anyone outside it. A project is a confined space.
+  const eligibleMembers = eligibleMembersFor(task.projectId, ws.projects, ws.members);
+
+  const setReviewer = (id: string) => {
+    setReviewerId(id);
+    ws.updateTask(task.id, { reviewerId: id });
+  };
 
   const doneCount = subtasks.filter((s) => s.done).length;
   const pct = subtasks.length
@@ -124,149 +127,280 @@ function TaskBody({ task }: { task: Task }) {
     else if (!next) setTitle(task.title);
   };
 
-  const toggleSub = (id: string) =>
-    setSubtasks((list) =>
-      list.map((s) => (s.id === id ? { ...s, done: !s.done } : s)),
-    );
+  const commitDescription = () => {
+    if (description !== (task.description ?? "")) {
+      ws.updateTask(task.id, { description });
+    }
+  };
 
+  // Subtask edits persist immediately (optimistic + API via updateTask).
+  const saveSubtasks = (next: SubTask[]) => {
+    setSubtasks(next);
+    ws.updateTask(task.id, { subtasks: next });
+  };
+  const toggleSub = (id: string) =>
+    saveSubtasks(
+      subtasks.map((s) => (s.id === id ? { ...s, done: !s.done } : s)),
+    );
   const addSub = () => {
     const t = newSub.trim();
     if (!t) return;
-    setSubtasks((list) => [
-      ...list,
-      { id: `${task.id}-n${Date.now()}`, title: t, done: false },
+    saveSubtasks([
+      ...subtasks,
+      { id: `st-${Date.now()}`, title: t, done: false },
     ]);
     setNewSub("");
   };
-
   const removeSub = (id: string) =>
-    setSubtasks((list) => list.filter((s) => s.id !== id));
+    saveSubtasks(subtasks.filter((s) => s.id !== id));
 
   const sendComment = () => {
     const t = draft.trim();
     if (!t) return;
-    setComments((list) => [
-      ...list,
-      { id: `c${Date.now()}`, who: "u1", text: t, time: "just now" },
-    ]);
+    const next: Comment[] = [
+      ...comments,
+      { id: `c-${Date.now()}`, authorId: ws.me.id, text: t, at: Date.now() },
+    ];
+    setComments(next);
+    ws.updateTask(task.id, { comments: next });
     setDraft("");
   };
 
+  // Documents attached to this task.
+  const docs = ws.attachments.filter((a) => a.taskId === task.id);
+  const docInputRef = useRef<HTMLInputElement>(null);
+  const onPickDocs = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const list = Array.from(e.target.files ?? []);
+    if (list.length) void ws.uploadTaskDocuments(task.id, task.projectId, list);
+    e.target.value = "";
+  };
+  const viewDocument = async (objectKey: string) => {
+    try {
+      const res = await authedFetch(
+        `/api/attachments?key=${encodeURIComponent(objectKey)}`,
+      );
+      if (!res.ok) return;
+      const { url } = await res.json();
+      if (url) window.open(url, "_blank", "noopener");
+    } catch {
+      /* ignore */
+    }
+  };
+
   const toggleAssignee = (id: string) => {
-    setAssigneeIds((current) => {
-      const has = current.includes(id);
-      let next = has ? current.filter((x) => x !== id) : [...current, id];
-      if (next.length === 0) next = current.length ? current : [task.assigneeId];
-      ws.updateTask(task.id, {
-        assigneeIds: next,
-        assigneeId: next[0] ?? task.assigneeId,
-      });
-      return next;
+    const has = assigneeIds.includes(id);
+    let next = has ? assigneeIds.filter((x) => x !== id) : [...assigneeIds, id];
+    if (next.length === 0) next = [task.assigneeId];
+    setAssigneeIds(next);
+    // Persist OUTSIDE any state updater (calling another store's setState inside
+    // a useState updater triggers "update while rendering" in React).
+    ws.updateTask(task.id, {
+      assigneeIds: next,
+      assigneeId: next[0] ?? task.assigneeId,
     });
   };
 
-  const onDelete = () => {
+  const onDelete = () => setConfirmOpen(true);
+  const confirmDelete = () => {
     ws.deleteTask(task.id);
     router.push(`/app/board?project=${task.projectId}`);
   };
 
   return (
-    <div className="h-full overflow-y-auto bg-paper">
-      <div className="w-full max-w-[1100px] px-6 py-6">
-        {/* ---- Top bar ---- */}
-        <div className="flex flex-wrap items-center gap-3">
+    <>
+    <div className="h-full overflow-y-auto bg-sunken">
+      <div className="mx-auto w-full max-w-[1100px] px-5 py-6 sm:px-6">
+        {/* Breadcrumbs */}
+        <nav className="mb-4 flex min-w-0 items-center gap-1.5 text-[12.5px] text-ink-soft">
           <button
             type="button"
-            onClick={() => router.back()}
-            className="flex size-9 shrink-0 items-center justify-center rounded-xl border border-line bg-card text-ink-soft shadow-card transition-colors hover:border-signal/40 hover:text-ink"
-            aria-label="Go back"
+            onClick={() => router.push(`/app/board?project=${task.projectId}`)}
+            className="shrink-0 transition-colors hover:text-ink"
           >
-            <ArrowLeft className="size-4" />
+            Projects
           </button>
+          <ChevronRight className="size-3.5 shrink-0" />
+          <span className="min-w-0 truncate text-ink-muted">{project?.name}</span>
+          <ChevronRight className="size-3.5 shrink-0" />
+          <span className="shrink-0 font-semibold text-ink">{taskKey(task)}</span>
+        </nav>
 
-          <Link
-            href={`/app/board?project=${task.projectId}`}
-            className="flex min-w-0 items-center gap-2 text-[13px] font-semibold"
-          >
-            <span
-              className="size-2.5 shrink-0 rounded-[3px]"
-              style={{ background: project?.color }}
+        {/* ---- Header card ---- */}
+        <div className="mb-5 rounded-2xl border border-line bg-card p-5 shadow-card">
+          <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+            <div className="flex flex-wrap items-center gap-2">
+              {/* Status (editable pill) */}
+              {canEdit ? (
+                <Dropdown
+                  trigger={
+                    <>
+                      <span className="size-1.5 rounded-full" style={{ background: task.tagColor }} />
+                      <span>{COLUMN_LABEL[task.column] ?? task.column}</span>
+                    </>
+                  }
+                >
+                  {(close) =>
+                    ws.columnsForProject(task.projectId).map((col) => (
+                      <MenuItem
+                        key={col.id}
+                        active={col.id === task.column}
+                        onClick={() => {
+                          ws.updateTask(task.id, { column: col.id });
+                          close();
+                        }}
+                      >
+                        <span
+                          className={cn(
+                            "size-2 shrink-0 rounded-full",
+                            col.id === task.column ? "bg-signal" : "bg-ink-soft",
+                          )}
+                          aria-hidden
+                        />
+                        <span className="flex-1 truncate">{col.name}</span>
+                      </MenuItem>
+                    ))
+                  }
+                </Dropdown>
+              ) : (
+                <span className="inline-flex items-center gap-1.5 rounded-lg bg-secondary px-2.5 py-1.5 text-[12.5px] font-bold text-ink">
+                  <span className="size-1.5 rounded-full" style={{ background: task.tagColor }} />
+                  {COLUMN_LABEL[task.column] ?? task.column}
+                </span>
+              )}
+
+              {/* Priority (editable pill) */}
+              {canEdit ? (
+                <Dropdown
+                  trigger={
+                    <>
+                      <Flag className="size-3.5" style={{ fill: pr.color, color: pr.color }} />
+                      <span style={{ color: pr.color }}>{task.priority}</span>
+                    </>
+                  }
+                >
+                  {(close) =>
+                    PRIORITIES.map((p) => {
+                      const meta = priorityMeta[p];
+                      return (
+                        <MenuItem
+                          key={p}
+                          active={p === task.priority}
+                          onClick={() => {
+                            ws.updateTask(task.id, { priority: p });
+                            close();
+                          }}
+                        >
+                          <Flag className="size-3.5" style={{ fill: meta.color, color: meta.color }} />
+                          <span className="flex-1 truncate">{p}</span>
+                          <span className="font-mono text-[11px] text-ink-soft">{meta.label}</span>
+                        </MenuItem>
+                      );
+                    })
+                  }
+                </Dropdown>
+              ) : (
+                <span className="inline-flex items-center gap-1.5 text-[12.5px] font-bold" style={{ color: pr.color }}>
+                  <Flag className="size-3.5" style={{ fill: pr.color, color: pr.color }} />
+                  {task.priority}
+                </span>
+              )}
+
+              <span className="mx-0.5 h-4 w-px bg-line" />
+              <span className="text-[12.5px] text-ink-soft">
+                {task.due && task.due !== "—" ? `Due ${task.due}` : "No due date"}
+              </span>
+            </div>
+
+            {canDelete && (
+              <div className="relative self-start md:self-auto">
+                <button
+                  type="button"
+                  onClick={() => setActionsOpen((v) => !v)}
+                  aria-label="Task actions"
+                  aria-expanded={actionsOpen}
+                  className="grid size-9 place-items-center rounded-lg border border-line text-ink-soft transition-colors hover:bg-secondary hover:text-ink"
+                >
+                  <MoreHorizontal className="size-4" />
+                </button>
+                {actionsOpen && (
+                  <>
+                    <div className="fixed inset-0 z-10" onClick={() => setActionsOpen(false)} />
+                    <div className="absolute right-0 top-full z-20 mt-1 w-44 rounded-lg border border-line bg-popover p-1 shadow-float">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setActionsOpen(false);
+                          onDelete();
+                        }}
+                        className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-[12.5px] font-medium text-red-700 transition-colors hover:bg-red-500/10 dark:text-red-300"
+                      >
+                        <Trash2 className="size-3.5" />
+                        Delete task
+                      </button>
+                    </div>
+                  </>
+                )}
+              </div>
+            )}
+          </div>
+
+          {/* Title */}
+          {canEdit ? (
+            <input
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
+              onBlur={commitTitle}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  e.preventDefault();
+                  e.currentTarget.blur();
+                }
+              }}
+              className="-mx-2 mt-4 w-[calc(100%+1rem)] rounded-lg border border-transparent bg-transparent px-2 py-1 font-display text-[clamp(1.6rem,3vw,2rem)] leading-tight font-extrabold tracking-tight text-ink outline-none transition-colors hover:bg-paper-raised focus:border-signal/40 focus:bg-card"
             />
-            <span className="truncate text-ink-muted transition-colors hover:text-ink">
-              {project?.name}
-            </span>
-            <span className="text-line-strong">/</span>
-            <span className="shrink-0 font-mono text-ink-muted">
-              {taskKey(task)}
-            </span>
-          </Link>
-
-          <span className="inline-flex items-center gap-1.5 rounded-md bg-secondary px-2 py-1 text-[12px] font-bold text-ink">
-            <span
-              className="size-1.5 rounded-full"
-              style={{ background: task.tagColor }}
-            />
-            {COLUMN_LABEL[task.column] ?? task.column}
-          </span>
-
-          {canDelete && (
-            <button
-              type="button"
-              onClick={onDelete}
-              className="ml-auto flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-[12.5px] font-semibold text-red-600 transition-colors hover:bg-red-500/10"
-            >
-              <Trash2 className="size-3.5" strokeWidth={2} />
-              <span className="hidden sm:inline">Delete</span>
-            </button>
+          ) : (
+            <h1 className="mt-4 font-display text-[clamp(1.6rem,3vw,2rem)] leading-tight font-extrabold tracking-tight text-ink">
+              {title}
+            </h1>
           )}
         </div>
 
-        {/* ---- Two-column layout ---- */}
-        <div className="mt-6 flex flex-col gap-8 lg:flex-row">
+        {/* ---- 8 / 4 layout ---- */}
+        <div className="grid grid-cols-1 gap-5 lg:grid-cols-12">
           {/* MAIN */}
-          <div className="min-w-0 lg:flex-1">
-            {/* Title */}
-            {canEdit ? (
-              <input
-                value={title}
-                onChange={(e) => setTitle(e.target.value)}
-                onBlur={commitTitle}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") {
-                    e.preventDefault();
-                    e.currentTarget.blur();
-                  }
-                }}
-                className="-mx-2 w-[calc(100%+1rem)] rounded-lg border border-transparent bg-transparent px-2 py-1 font-display text-[30px] leading-tight font-extrabold tracking-tight text-ink outline-none transition-colors hover:bg-paper-raised focus:border-signal/40 focus:bg-card"
-              />
-            ) : (
-              <h1 className="font-display text-[30px] leading-tight font-extrabold tracking-tight text-ink">
-                {title}
-              </h1>
-            )}
-
+          <div className="min-w-0 space-y-5 lg:col-span-7">
             {/* Description */}
             <Section title="Description">
               {canEdit ? (
                 <textarea
                   value={description}
                   onChange={(e) => setDescription(e.target.value)}
+                  onBlur={commitDescription}
                   rows={6}
                   placeholder="Add a description…"
                   className="w-full resize-y rounded-xl border border-line bg-paper-raised px-4 py-3.5 text-[14px] leading-relaxed text-ink-muted outline-none transition-colors placeholder:text-ink-soft focus:border-signal/40 focus:bg-card"
                 />
-              ) : (
+              ) : description ? (
                 <p className="text-[14px] leading-relaxed whitespace-pre-wrap text-ink-muted">
                   {description}
                 </p>
+              ) : (
+                <p className="text-[14px] text-ink-soft">No description yet.</p>
               )}
             </Section>
 
             {/* Sub-tasks */}
             <Section title="Sub-tasks" meta={`${doneCount}/${subtasks.length}`}>
-              <div className="mb-3">
-                <ProgressBar value={pct} />
-              </div>
+              {subtasks.length > 0 && (
+                <div className="mb-3">
+                  <ProgressBar value={pct} />
+                </div>
+              )}
+              {subtasks.length === 0 && (
+                <p className="mb-1 text-[13px] text-ink-soft">
+                  No sub-tasks yet{canEdit ? " — add one below." : "."}
+                </p>
+              )}
               <div className="space-y-0.5">
                 {subtasks.map((s, i) => (
                   <div
@@ -335,124 +469,94 @@ function TaskBody({ task }: { task: Task }) {
               )}
             </Section>
 
-            {/* Comments */}
-            <Section title="Comments" meta={`${comments.length}`}>
-              <div className="space-y-5">
-                {comments.map((c) => {
-                  const m = memberById(c.who);
-                  return (
-                    <div key={c.id} className="flex gap-3">
-                      {m && (
-                        <MemberAvatar member={m} size={32} className="mt-0.5" />
-                      )}
+            {/* Documents */}
+            <Section title="Documents" meta={docs.length ? `${docs.length}` : undefined}>
+              {docs.length === 0 ? (
+                <p className="text-[13px] text-ink-soft">
+                  No documents yet{canEdit ? " — attach files below." : "."}
+                </p>
+              ) : (
+                <div className="space-y-1.5">
+                  {docs.map((d) => (
+                    <div
+                      key={d.id}
+                      className="flex items-center gap-2.5 rounded-xl border border-line bg-card px-3 py-2 shadow-card"
+                    >
+                      <span className="grid size-8 shrink-0 place-items-center rounded-lg bg-signal-soft text-signal">
+                        <FileText className="size-4" />
+                      </span>
                       <div className="min-w-0 flex-1">
-                        <div className="flex items-baseline gap-2">
-                          <span className="text-[13.5px] font-semibold text-ink">
-                            {m?.name ?? "Unknown"}
-                          </span>
-                          <span className="text-[11px] text-ink-soft">
-                            {c.time}
-                          </span>
-                        </div>
-                        <p className="mt-1 text-[14px] leading-relaxed text-ink-muted">
-                          {c.text}
+                        <p className="truncate text-[13px] font-medium text-ink">
+                          {d.name}
+                        </p>
+                        <p className="text-[11px] text-ink-soft">
+                          {[d.size, d.date].filter(Boolean).join(" · ")}
                         </p>
                       </div>
+                      {d.objectKey && (
+                        <button
+                          type="button"
+                          onClick={() => viewDocument(d.objectKey!)}
+                          aria-label={`Open ${d.name}`}
+                          className="grid size-7 shrink-0 place-items-center rounded-md text-ink-soft transition-colors hover:bg-secondary hover:text-ink"
+                        >
+                          <Download className="size-4" />
+                        </button>
+                      )}
+                      {canDelete && (
+                        <button
+                          type="button"
+                          onClick={() => ws.removeAttachment(d.id)}
+                          aria-label={`Delete ${d.name}`}
+                          className="grid size-7 shrink-0 place-items-center rounded-md text-ink-soft transition-colors hover:bg-red-500/10 hover:text-red-600"
+                        >
+                          <Trash2 className="size-4" />
+                        </button>
+                      )}
                     </div>
-                  );
-                })}
-              </div>
-              <div className="mt-5 flex items-center gap-2 rounded-xl border border-line bg-paper-raised px-3.5 py-2.5 focus-within:border-signal/40">
-                <input
-                  value={draft}
-                  onChange={(e) => setDraft(e.target.value)}
-                  onKeyDown={(e) => e.key === "Enter" && sendComment()}
-                  placeholder="Add a comment…"
-                  className="w-full bg-transparent text-[14px] text-ink outline-none placeholder:text-ink-soft"
-                />
-                <button
-                  type="button"
-                  onClick={sendComment}
-                  aria-label="Send comment"
-                  className="grid size-8 shrink-0 place-items-center rounded-lg bg-signal text-white transition-colors hover:bg-signal-strong"
-                >
-                  <Send className="size-3.5" />
-                </button>
-              </div>
+                  ))}
+                </div>
+              )}
+              {canEdit && (
+                <>
+                  <input
+                    ref={docInputRef}
+                    type="file"
+                    multiple
+                    onChange={onPickDocs}
+                    className="hidden"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => docInputRef.current?.click()}
+                    className="mt-2 flex w-full items-center justify-center gap-2 rounded-xl border border-dashed border-line-strong bg-paper-raised px-3 py-3 text-[13px] font-semibold text-ink-muted transition-colors hover:border-signal/50 hover:text-ink"
+                  >
+                    <Paperclip className="size-4" />
+                    Attach files
+                  </button>
+                </>
+              )}
             </Section>
+
           </div>
 
-          {/* DETAILS SIDEBAR */}
-          <div className="lg:w-[280px] lg:shrink-0">
-            <div className="rounded-2xl border border-line bg-card px-5 py-3 shadow-card lg:sticky lg:top-6">
-              {/* Status */}
-              <Detail label="Status">
-                {canEdit ? (
-                  <Dropdown
-                    trigger={
-                      <>
-                        <span
-                          className="size-2 shrink-0 rounded-full"
-                          style={{ background: task.tagColor }}
-                        />
-                        <span className="truncate">
-                          {COLUMN_LABEL[task.column] ?? task.column}
-                        </span>
-                      </>
-                    }
-                  >
-                    {(close) =>
-                      ws.columns.map((col) => (
-                        <MenuItem
-                          key={col.id}
-                          active={col.id === task.column}
-                          onClick={() => {
-                            ws.updateTask(task.id, { column: col.id });
-                            close();
-                          }}
-                        >
-                          <span
-                            className={cn(
-                              "size-2 shrink-0 rounded-full",
-                              col.id === task.column ? "bg-signal" : "bg-ink-soft",
-                            )}
-                            aria-hidden
-                          />
-                          <span className="flex-1 truncate">{col.name}</span>
-                        </MenuItem>
-                      ))
-                    }
-                  </Dropdown>
-                ) : (
-                  <span className="inline-flex items-center gap-1.5 rounded-md bg-secondary px-2 py-1 text-[12px] font-bold text-ink">
-                    <span
-                      className="size-1.5 rounded-full"
-                      style={{ background: task.tagColor }}
-                    />
-                    {COLUMN_LABEL[task.column] ?? task.column}
-                  </span>
-                )}
-              </Detail>
+          {/* RIGHT HALF — comments + details */}
+          <aside className="space-y-5 lg:col-span-5">
+          
 
+            {/* Details */}
+            <div className="rounded-2xl border border-line bg-card px-5 py-3 shadow-card">
               {/* Assignee (multi-select) */}
               <Detail label="Assignee">
                 {canAssign ? (
                   <Dropdown trigger={<AssigneeSummary ids={assigneeIds} />}>
-                    {() =>
-                      ws.members.map((m) => {
-                        const selected = assigneeIds.includes(m.id);
-                        return (
-                          <MenuItem
-                            key={m.id}
-                            active={selected}
-                            onClick={() => toggleAssignee(m.id)}
-                          >
-                            <MemberAvatar member={m} size={22} />
-                            <span className="flex-1 truncate">{m.name}</span>
-                          </MenuItem>
-                        );
-                      })
-                    }
+                    {() => (
+                      <MemberSearchList
+                        members={eligibleMembers}
+                        selectedIds={assigneeIds}
+                        onToggle={toggleAssignee}
+                      />
+                    )}
                   </Dropdown>
                 ) : (
                   <div className="px-2 py-1">
@@ -473,9 +577,40 @@ function TaskBody({ task }: { task: Task }) {
                 )}
               </Detail>
 
-              {/* Reviewer (read-only) */}
+              {/* Reviewer */}
               <Detail label="Reviewer">
-                {reviewer ? (
+                {canAssign ? (
+                  <Dropdown
+                    trigger={
+                      reviewer ? (
+                        <span className="flex min-w-0 items-center gap-2">
+                          <MemberAvatar member={reviewer} size={22} />
+                          <span className="truncate text-[13px] font-medium text-ink">
+                            {reviewer.name}
+                          </span>
+                        </span>
+                      ) : (
+                        <span className="text-[13px] text-ink-soft">Add a reviewer</span>
+                      )
+                    }
+                  >
+                    {(close) => (
+                      <MemberSearchList
+                        members={eligibleMembers}
+                        selectedIds={reviewerId ? [reviewerId] : []}
+                        single
+                        onClear={() => {
+                          setReviewer("");
+                          close();
+                        }}
+                        onToggle={(id) => {
+                          setReviewer(id);
+                          close();
+                        }}
+                      />
+                    )}
+                  </Dropdown>
+                ) : reviewer ? (
                   <span className="flex items-center gap-2">
                     <MemberAvatar member={reviewer} size={22} />
                     <span className="text-[13px] font-medium text-ink">
@@ -484,61 +619,6 @@ function TaskBody({ task }: { task: Task }) {
                   </span>
                 ) : (
                   <span className="text-[13px] text-ink-soft">—</span>
-                )}
-              </Detail>
-
-              {/* Priority */}
-              <Detail label="Priority">
-                {canEdit ? (
-                  <Dropdown
-                    trigger={
-                      <>
-                        <Flag
-                          className="size-3.5 shrink-0"
-                          style={{ fill: pr.color, color: pr.color }}
-                        />
-                        <span className="truncate" style={{ color: pr.color }}>
-                          {task.priority}
-                        </span>
-                      </>
-                    }
-                  >
-                    {(close) =>
-                      PRIORITIES.map((p) => {
-                        const meta = priorityMeta[p];
-                        return (
-                          <MenuItem
-                            key={p}
-                            active={p === task.priority}
-                            onClick={() => {
-                              ws.updateTask(task.id, { priority: p });
-                              close();
-                            }}
-                          >
-                            <Flag
-                              className="size-3.5 shrink-0"
-                              style={{ fill: meta.color, color: meta.color }}
-                            />
-                            <span className="flex-1 truncate">{p}</span>
-                            <span className="font-mono text-[11px] text-ink-soft">
-                              {meta.label}
-                            </span>
-                          </MenuItem>
-                        );
-                      })
-                    }
-                  </Dropdown>
-                ) : (
-                  <span
-                    className="inline-flex items-center gap-1.5 text-[13px] font-semibold"
-                    style={{ color: pr.color }}
-                  >
-                    <Flag
-                      className="size-3.5"
-                      style={{ fill: pr.color, color: pr.color }}
-                    />
-                    {task.priority}
-                  </span>
                 )}
               </Detail>
 
@@ -580,28 +660,213 @@ function TaskBody({ task }: { task: Task }) {
                   ))}
                 </div>
               </Detail>
-
-              {/* Created */}
-              <Detail label="Created">
-                <span className="text-[13px] text-ink-muted">
-                  {detail.created}
-                </span>
-              </Detail>
             </div>
 
-            {canDelete && (
-              <button
-                type="button"
-                onClick={onDelete}
-                className="mt-3 flex w-full items-center justify-center gap-2 rounded-xl border border-red-500/30 bg-card py-2.5 text-[13px] font-semibold text-red-600 transition-colors hover:bg-red-500/10"
-              >
-                <Trash2 className="size-3.5" />
-                Delete task
-              </button>
-            )}
-          </div>
+              {/* Comments */}
+            <Section title="Comments" meta={`${comments.length}`}>
+              {comments.length === 0 ? (
+                <p className="text-[13px] text-ink-soft">
+                  No comments yet. Start the conversation below.
+                </p>
+              ) : (
+                <div className="space-y-5">
+                  {comments.map((c) => {
+                    const m = memberById(c.authorId);
+                    return (
+                      <div key={c.id} className="flex gap-3">
+                        {m && (
+                          <MemberAvatar member={m} size={32} className="mt-0.5" />
+                        )}
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-baseline gap-2">
+                            <span className="text-[13.5px] font-semibold text-ink">
+                              {m?.name ?? "Unknown"}
+                            </span>
+                            <span className="text-[11px] text-ink-soft">
+                              {relativeTime(c.at)}
+                            </span>
+                          </div>
+                          <p className="mt-1 text-[14px] leading-relaxed whitespace-pre-wrap text-ink-muted">
+                            {c.text}
+                          </p>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+              {canEdit && (
+                <div className="mt-5 flex items-center gap-2 rounded-xl border border-line bg-paper-raised px-3.5 py-2.5 focus-within:border-signal/40">
+                  <input
+                    value={draft}
+                    onChange={(e) => setDraft(e.target.value)}
+                    onKeyDown={(e) => e.key === "Enter" && sendComment()}
+                    placeholder="Add a comment…"
+                    className="w-full bg-transparent text-[14px] text-ink outline-none placeholder:text-ink-soft"
+                  />
+                  <button
+                    type="button"
+                    onClick={sendComment}
+                    aria-label="Send comment"
+                    className="grid size-8 shrink-0 place-items-center rounded-lg bg-signal text-white transition-colors hover:bg-signal-strong"
+                  >
+                    <Send className="size-3.5" />
+                  </button>
+                </div>
+              )}
+            </Section>
+          </aside>
         </div>
       </div>
+    </div>
+
+      <ConfirmDialog
+        open={confirmOpen}
+        title="Delete this task?"
+        body={`“${task.title}” and its sub-tasks and comments will be permanently removed. This can’t be undone.`}
+        confirmLabel="Delete task"
+        onCancel={() => setConfirmOpen(false)}
+        onConfirm={confirmDelete}
+      />
+    </>
+  );
+}
+
+/* ---- Confirm dialog (used for destructive actions) ---- */
+function ConfirmDialog({
+  open,
+  title,
+  body,
+  confirmLabel,
+  onCancel,
+  onConfirm,
+}: {
+  open: boolean;
+  title: string;
+  body: string;
+  confirmLabel: string;
+  onCancel: () => void;
+  onConfirm: () => void;
+}) {
+  useEffect(() => {
+    if (!open) return;
+    const onKey = (e: KeyboardEvent) => e.key === "Escape" && onCancel();
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [open, onCancel]);
+
+  return (
+    <AnimatePresence>
+      {open && (
+        <motion.div
+          className="fixed inset-0 z-[120] grid place-items-center p-4"
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+        >
+          <button
+            type="button"
+            aria-label="Close dialog"
+            onClick={onCancel}
+            className="absolute inset-0 cursor-default bg-ink/40 backdrop-blur-sm"
+          />
+          <motion.div
+            role="alertdialog"
+            aria-modal="true"
+            aria-labelledby="confirm-title"
+            initial={{ opacity: 0, y: 12, scale: 0.97 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: 12, scale: 0.97 }}
+            transition={{ duration: 0.16, ease: [0.16, 1, 0.3, 1] }}
+            className="relative w-full max-w-[400px] rounded-2xl border border-line bg-card p-6 shadow-float"
+          >
+            <div className="grid size-11 place-items-center rounded-xl bg-red-500/10 text-red-600">
+              <Trash2 className="size-5" />
+            </div>
+            <h2
+              id="confirm-title"
+              className="mt-4 font-display text-[18px] font-extrabold tracking-tight text-ink"
+            >
+              {title}
+            </h2>
+            <p className="mt-1.5 text-[13.5px] leading-relaxed text-ink-muted">
+              {body}
+            </p>
+            <div className="mt-6 flex justify-end gap-2.5">
+              <button
+                type="button"
+                onClick={onCancel}
+                className="rounded-xl border border-line bg-card px-4 py-2.5 text-[13px] font-semibold text-ink-muted transition-colors hover:border-line-strong hover:text-ink"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                autoFocus
+                onClick={onConfirm}
+                className="rounded-xl bg-red-600 px-4 py-2.5 text-[13px] font-bold text-white transition-colors hover:bg-red-700"
+              >
+                {confirmLabel}
+              </button>
+            </div>
+          </motion.div>
+        </motion.div>
+      )}
+    </AnimatePresence>
+  );
+}
+
+/* ---- Searchable people picker (assignees / reviewer) ---- */
+function MemberSearchList({
+  members,
+  selectedIds,
+  onToggle,
+  single,
+  onClear,
+}: {
+  members: Member[];
+  selectedIds: string[];
+  onToggle: (id: string) => void;
+  single?: boolean;
+  onClear?: () => void;
+}) {
+  const [q, setQ] = useState("");
+  const query = q.trim().toLowerCase();
+  const filtered = members.filter((m) => m.name.toLowerCase().includes(query));
+  return (
+    <div>
+      <div className="sticky top-0 z-10 -mx-1.5 -mt-1.5 mb-1 border-b border-line bg-popover p-1.5">
+        <div className="flex items-center gap-2 rounded-lg border border-line bg-paper-raised px-2.5 py-1.5 focus-within:border-signal/40">
+          <Search className="size-3.5 shrink-0 text-ink-soft" />
+          <input
+            autoFocus
+            value={q}
+            onChange={(e) => setQ(e.target.value)}
+            placeholder="Search people…"
+            className="w-full bg-transparent text-[13px] text-ink outline-none placeholder:text-ink-soft"
+          />
+        </div>
+      </div>
+      {single && onClear && (
+        <MenuItem active={selectedIds.length === 0} onClick={onClear}>
+          <span className="grid size-[22px] shrink-0 place-items-center rounded-full bg-secondary text-ink-soft">
+            <X className="size-3" />
+          </span>
+          <span className="flex-1">No reviewer</span>
+        </MenuItem>
+      )}
+      {filtered.length === 0 ? (
+        <p className="px-2.5 py-3 text-center text-[12.5px] text-ink-soft">
+          No people found.
+        </p>
+      ) : (
+        filtered.map((m) => (
+          <MenuItem key={m.id} active={selectedIds.includes(m.id)} onClick={() => onToggle(m.id)}>
+            <MemberAvatar member={m} size={22} />
+            <span className="flex-1 truncate">{m.name}</span>
+          </MenuItem>
+        ))
+      )}
     </div>
   );
 }
@@ -617,9 +882,9 @@ function Section({
   children: ReactNode;
 }) {
   return (
-    <div className="mt-8">
+    <section className="rounded-2xl border border-line bg-card p-5 shadow-card">
       <div className="mb-3 flex items-center justify-between">
-        <h2 className="text-[12px] font-bold tracking-wide text-ink-soft uppercase">
+        <h2 className="font-display text-[15px] font-bold tracking-tight text-ink">
           {title}
         </h2>
         {meta && (
@@ -629,7 +894,7 @@ function Section({
         )}
       </div>
       {children}
-    </div>
+    </section>
   );
 }
 

@@ -1,5 +1,5 @@
 import { deleteItem, getItem, key, putItem, stripKeys } from "@/lib/ddb";
-import { requireWorkspace } from "@/lib/workspace-server";
+import { canWrite, requireWorkspace } from "@/lib/workspace-server";
 
 export async function PATCH(
   request: Request,
@@ -7,6 +7,9 @@ export async function PATCH(
 ) {
   const r = await requireWorkspace(request);
   if ("error" in r) return r.error;
+  if (!canWrite(r.ctx.role)) {
+    return Response.json({ error: "Forbidden — your role is view-only" }, { status: 403 });
+  }
   const { id } = await ctx.params;
 
   const existing = await getItem(key.project(r.ctx.workspaceId, id));
@@ -28,6 +31,9 @@ export async function DELETE(
 ) {
   const r = await requireWorkspace(request);
   if ("error" in r) return r.error;
+  if (!canWrite(r.ctx.role)) {
+    return Response.json({ error: "Forbidden — your role is view-only" }, { status: 403 });
+  }
   const { id } = await ctx.params;
   await deleteItem(key.project(r.ctx.workspaceId, id));
   return Response.json({ ok: true });

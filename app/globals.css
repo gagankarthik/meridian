@@ -89,7 +89,7 @@
   --sunken: #f1f2f4;
   --ink: #16171d; /* near-black — headlines */
   --ink-muted: #565b66; /* body */
-  --ink-soft: #8b909c; /* captions */
+  --ink-soft: #6b7280; /* captions — darkened to meet WCAG AA 4.5:1 on paper */
   --signal: #2563eb; /* Atlassian blue */
   --signal-strong: #1d4ed8; /* hover */
   --signal-soft: #eaf1ff; /* tinted bg */
@@ -211,6 +211,14 @@
   }
   body {
     @apply bg-background text-foreground;
+  }
+  /* Visible keyboard focus indicator for everything that doesn't manage its
+     own (WCAG 2.1 AA — 2.4.7 Focus Visible). Components that set their own
+     focus-visible ring override this via the utilities layer. */
+  :focus-visible {
+    outline: 2px solid var(--signal);
+    outline-offset: 2px;
+    border-radius: 2px;
   }
   ::selection {
     background: var(--signal-soft);

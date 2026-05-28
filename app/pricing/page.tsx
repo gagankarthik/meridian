@@ -13,7 +13,7 @@ export default function PricingPage() {
   return (
     <div className="min-h-screen bg-paper">
       <SiteNav />
-      <main className="pt-16">
+      <main id="main" tabIndex={-1} className="pt-16 outline-none">
         <Pricing />
         <CTA />
       </main>

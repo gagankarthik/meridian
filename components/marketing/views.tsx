@@ -1,402 +1,232 @@
 "use client";
 
-import { useState } from "react";
-import { AnimatePresence, motion } from "motion/react";
-import { Columns3, GanttChartSquare, PieChart } from "lucide-react";
+import Link from "next/link";
+import {
+  ArrowRight,
+  Bell,
+  CalendarDays,
+  CheckSquare,
+  LayoutDashboard,
+  Search,
+  Settings,
+  Users,
+} from "lucide-react";
+import { Avatar } from "@/components/app/widgets";
+import { Reveal, Section } from "./primitives";
 
-const ease = [0.16, 1, 0.3, 1] as const;
+const NAV = [
+  { icon: LayoutDashboard, label: "Dashboard", active: true },
+  { icon: CheckSquare, label: "My tasks" },
+  { icon: Users, label: "Team" },
+  { icon: CalendarDays, label: "Calendar" },
+  { icon: Settings, label: "Settings" },
+];
 
-const TABS = [
-  { id: "board", label: "Board", icon: Columns3 },
-  { id: "timeline", label: "Timeline", icon: GanttChartSquare },
-  { id: "dashboard", label: "Dashboard", icon: PieChart },
-] as const;
+type Card = {
+  title: string;
+  meta: string;
+  bar: string;
+  team: { initials: string; hue: string }[];
+  tag?: { label: string; tint: string };
+};
 
-type TabId = (typeof TABS)[number]["id"];
+const TODO: Card[] = [
+  {
+    title: "Presentation for Dribbble",
+    meta: "Due in 3 days",
+    bar: "#2563eb",
+    team: [
+      { initials: "WC", hue: "#2563eb" },
+      { initials: "MJ", hue: "#22a06b" },
+    ],
+    tag: { label: "Design", tint: "#7a3ff0" },
+  },
+  {
+    title: "Mobile app — onboarding flow",
+    meta: "5 subtasks",
+    bar: "#e2a200",
+    team: [{ initials: "TL", hue: "#e2a200" }],
+  },
+];
+
+const PROGRESS: Card[] = [
+  {
+    title: "Marketing — landing page",
+    meta: "62% complete",
+    bar: "#22a06b",
+    team: [
+      { initials: "SW", hue: "#e2a200" },
+      { initials: "AK", hue: "#2563eb" },
+      { initials: "RB", hue: "#06b6d4" },
+    ],
+    tag: { label: "In review", tint: "#22a06b" },
+  },
+  {
+    title: "Design system & components",
+    meta: "Updated 2h ago",
+    bar: "#7a3ff0",
+    team: [{ initials: "MJ", hue: "#22a06b" }],
+  },
+];
+
+function TaskCard({ card }: { card: Card }) {
+  return (
+    <div className="rounded-xl border border-line bg-card p-3 shadow-card transition-[box-shadow,transform,border-color] duration-200 hover:-translate-y-0.5 hover:border-ink/15 hover:shadow-raised">
+      <span
+        className="block h-1.5 w-10 rounded-full"
+        style={{ background: card.bar }}
+      />
+      <p className="mt-2.5 text-[13px] font-semibold leading-snug text-ink">
+        {card.title}
+      </p>
+      <p className="mt-1 text-[11px] text-ink-soft">{card.meta}</p>
+      <div className="mt-3 flex items-center justify-between">
+        <span className="flex -space-x-1.5">
+          {card.team.map((t) => (
+            <span key={t.initials} className="rounded-full ring-2 ring-card">
+              <Avatar initials={t.initials} hue={t.hue} size={20} />
+            </span>
+          ))}
+        </span>
+        {card.tag && (
+          <span
+            className="rounded-md px-2 py-0.5 text-[10px] font-bold"
+            style={{
+              background: `color-mix(in srgb, ${card.tag.tint} 14%, transparent)`,
+              color: card.tag.tint,
+            }}
+          >
+            {card.tag.label}
+          </span>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function Column({ title, count, cards }: { title: string; count: number; cards: Card[] }) {
+  return (
+    <div className="rounded-xl bg-paper-raised p-2.5">
+      <div className="mb-2.5 flex items-center justify-between px-1">
+        <span className="text-[12px] font-bold text-ink">{title}</span>
+        <span className="rounded-full bg-secondary px-1.5 text-[10.5px] font-bold text-ink-soft">
+          {count}
+        </span>
+      </div>
+      <div className="space-y-2.5">
+        {cards.map((c) => (
+          <TaskCard key={c.title} card={c} />
+        ))}
+      </div>
+    </div>
+  );
+}
 
 export function Views() {
-  const [tab, setTab] = useState<TabId>("board");
-
   return (
-    <section id="views" className="scroll-mt-20 py-24 sm:py-32">
-      <div className="mx-auto max-w-[1240px] px-5 sm:px-8 lg:px-12">
-        <div className="flex flex-col items-start justify-between gap-8 lg:flex-row lg:items-end">
-          <div className="relative max-w-xl">
-            {/* Decorative blue→cyan accent near the heading. */}
-            <HeadingAccent />
-            <h2 className="font-display text-[clamp(2rem,4vw,3.25rem)] leading-[1.05] font-extrabold tracking-[-0.025em] text-ink text-balance">
-              See the work the way you think.
-            </h2>
-            <p className="mt-5 text-lg leading-relaxed text-ink-muted">
-              The same data, rendered for the moment. Plan on a board, sequence
-              on a timeline, brief leadership on a dashboard.
-            </p>
-          </div>
-
-          <div className="inline-flex shrink-0 rounded-xl border border-line bg-card p-1 shadow-card">
-            {TABS.map((t) => {
-              const active = t.id === tab;
-              return (
-                <button
-                  key={t.id}
-                  onClick={() => setTab(t.id)}
-                  className={`relative inline-flex items-center gap-2 rounded-lg px-4 py-2 text-[13px] font-semibold transition-colors ${
-                    active ? "text-white" : "text-ink-muted hover:text-ink"
-                  }`}
-                >
-                  {active && (
-                    <motion.span
-                      layoutId="view-pill"
-                      className="absolute inset-0 rounded-lg bg-signal"
-                      transition={{ duration: 0.3, ease }}
-                    />
-                  )}
-                  <t.icon className="relative size-3.5" />
-                  <span className="relative">{t.label}</span>
-                </button>
-              );
-            })}
-          </div>
-        </div>
-
-        <motion.div
-          initial={{ opacity: 0, y: 24 }}
-          whileInView={{ opacity: 1, y: 0 }}
-          viewport={{ once: true, margin: "-10% 0px" }}
-          transition={{ duration: 0.7, ease }}
-          whileHover={{ y: -4 }}
-          className="group mt-12 overflow-hidden rounded-2xl border border-line bg-card shadow-float transition-shadow duration-300 hover:shadow-raised"
-        >
-          <div className="flex items-center justify-between border-b border-line bg-paper-raised px-4 py-2.5">
-            <span className="font-mono text-[11px] tracking-wider uppercase text-ink-muted">
-              Product · Q3 Launch
-            </span>
-            <span className="hidden font-mono text-[11px] tracking-wider uppercase text-ink-soft sm:block">
-              42 tasks · 6 owners
-            </span>
-          </div>
-          <div className="relative min-h-[420px] bg-sunken/50 p-4 sm:p-6">
-            <AnimatePresence mode="wait">
-              <motion.div
-                key={tab}
-                initial={{ opacity: 0, y: 12 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -12 }}
-                transition={{ duration: 0.35, ease }}
-              >
-                {tab === "board" && <BoardView />}
-                {tab === "timeline" && <TimelineView />}
-                {tab === "dashboard" && <DashboardView />}
-              </motion.div>
-            </AnimatePresence>
-          </div>
-        </motion.div>
-      </div>
-    </section>
-  );
-}
-
-/* Decorative blue→cyan accent that sits behind/above the heading. */
-function HeadingAccent() {
-  return (
-    <svg
-      aria-hidden
-      viewBox="0 0 120 24"
-      className="mb-4 h-5 w-28"
-      fill="none"
-    >
-      <defs>
-        <linearGradient id="views-accent" x1="0" y1="0" x2="120" y2="0" gradientUnits="userSpaceOnUse">
-          <stop offset="0" stopColor="#2563eb" />
-          <stop offset="1" stopColor="#06b6d4" />
-        </linearGradient>
-      </defs>
-      <motion.path
-        d="M2 18 C 28 18, 28 6, 54 6 S 92 18, 118 6"
-        stroke="url(#views-accent)"
-        strokeWidth="3"
-        strokeLinecap="round"
-        fill="none"
-        initial={{ pathLength: 0, opacity: 0 }}
-        whileInView={{ pathLength: 1, opacity: 1 }}
-        viewport={{ once: true }}
-        transition={{ duration: 1, ease }}
-      />
-      <motion.circle
-        cx="2"
-        cy="18"
-        r="3"
-        fill="#2563eb"
-        initial={{ scale: 0 }}
-        whileInView={{ scale: 1 }}
-        viewport={{ once: true }}
-        transition={{ duration: 0.4, delay: 0.2, ease }}
-        style={{ transformOrigin: "2px 18px" }}
-      />
-      <motion.circle
-        cx="118"
-        cy="6"
-        r="3"
-        fill="#06b6d4"
-        initial={{ scale: 0 }}
-        whileInView={{ scale: 1 }}
-        viewport={{ once: true }}
-        transition={{ duration: 0.4, delay: 0.9, ease }}
-        style={{ transformOrigin: "118px 6px" }}
-      />
-    </svg>
-  );
-}
-
-/* ---------------- Board ---------------- */
-const BOARD = [
-  {
-    name: "Backlog",
-    items: [
-      ["Audit log retention policy", "Security", "#1d9aaa"],
-      ["Mobile offline drafts", "Mobile", "#06b6d4"],
-    ],
-  },
-  {
-    name: "In progress",
-    items: [
-      ["Multi-region read replicas", "Platform", "var(--signal)"],
-      ["Onboarding redesign", "Design", "#3b82f6"],
-    ],
-  },
-  {
-    name: "Review",
-    items: [["SSO / SCIM provisioning", "Security", "#1d9aaa"]],
-  },
-  {
-    name: "Shipped",
-    items: [
-      ["Portfolio dashboards", "Analytics", "#22a06b"],
-      ["Slack notifications v2", "Integrations", "#e2a200"],
-    ],
-  },
-] as const;
-
-function BoardView() {
-  return (
-    <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-      {BOARD.map((col, ci) => (
-        <div key={col.name}>
-          <div className="mb-2.5 flex items-center justify-between">
-            <span className="text-[12px] font-semibold text-ink">
-              {col.name}
-            </span>
-            <span className="tnum font-mono text-[11px] text-ink-soft">
-              {col.items.length}
-            </span>
-          </div>
-          <div className="space-y-2.5">
-            {col.items.map(([title, tag, color], ii) => (
-              <motion.div
-                key={title}
-                initial={{ opacity: 0, y: 10 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{
-                  duration: 0.4,
-                  delay: 0.05 * (ci * 2 + ii),
-                  ease,
-                }}
-                className="rounded-sm border border-line bg-paper-raised p-3 transition-colors hover:border-ink/30"
-                style={{
-                  borderLeft: `3px solid ${color}`,
-                }}
-              >
-                <div className="mb-2 flex items-center gap-1.5">
-                  <span
-                    className="size-1.5 rounded-full"
-                    style={{ background: color }}
-                  />
-                  <span className="font-mono text-[10px] tracking-wider uppercase text-ink-soft">
-                    {tag}
-                  </span>
-                </div>
-                <p className="text-[12.5px] leading-snug font-medium text-ink">
-                  {title}
-                </p>
-              </motion.div>
-            ))}
-          </div>
-        </div>
-      ))}
-    </div>
-  );
-}
-
-/* ---------------- Timeline ---------------- */
-const GANTT = [
-  ["Discovery", 0, 22, "#06b6d4"],
-  ["Platform foundation", 12, 40, "var(--signal)"],
-  ["Design system", 24, 30, "#3b82f6"],
-  ["Security & SSO", 40, 34, "#1d9aaa"],
-  ["Beta rollout", 58, 28, "#22a06b"],
-  ["GA launch", 78, 20, "#e2a200"],
-] as const;
-
-function TimelineView() {
-  return (
-    <div>
-      <div className="mb-3 grid grid-cols-4 border-b border-line pb-2 font-mono text-[10px] tracking-[0.18em] uppercase text-ink-soft">
-        <span>July</span>
-        <span>August</span>
-        <span>September</span>
-        <span className="text-right">October</span>
-      </div>
-      <div className="relative space-y-3 py-1">
-        {/* today marker */}
-        <div
-          className="pointer-events-none absolute inset-y-0 z-10 w-px bg-signal/60"
-          style={{ left: "46%" }}
-        >
-          <span className="absolute -top-1 left-1/2 size-1.5 -translate-x-1/2 rounded-full bg-signal" />
-        </div>
-        {GANTT.map(([label, start, width, color], i) => (
-          <motion.div
-            key={label as string}
-            initial={{ opacity: 0, x: -8 }}
-            animate={{ opacity: 1, x: 0 }}
-            transition={{ duration: 0.4, delay: i * 0.06, ease }}
-            className="flex items-center gap-3"
+    <Section id="views" className="overflow-hidden py-20 sm:py-28">
+      <Reveal className="mx-auto max-w-2xl text-center">
+        <h2 className="font-display text-[clamp(2rem,4.2vw,2.9rem)] font-extrabold leading-[1.05] tracking-[-0.03em] text-ink text-balance">
+          Smart task management
+          <br className="hidden sm:block" /> for growing teams
+        </h2>
+        <p className="mx-auto mt-4 max-w-lg text-[17px] leading-relaxed text-ink-muted text-pretty">
+          Organize projects, assign work, and monitor progress on one platform
+          built to improve productivity and teamwork.
+        </p>
+        <div className="mt-7 flex flex-wrap items-center justify-center gap-2.5">
+          <Link
+            href="/signup"
+            className="group inline-flex items-center gap-2 rounded-xl bg-ink px-5 py-3 text-[14.5px] font-bold text-paper shadow-raised transition-transform hover:scale-[1.02] active:scale-100"
           >
-            <span className="w-32 shrink-0 truncate text-right text-[12px] text-ink-muted">
-              {label}
-            </span>
-            <div className="relative h-7 flex-1 rounded-sm bg-secondary/60">
-              <motion.div
-                initial={{ width: 0 }}
-                animate={{ width: `${width}%` }}
-                transition={{ duration: 0.7, delay: i * 0.06, ease }}
-                className="absolute inset-y-0 flex items-center rounded-sm px-2"
-                style={{
-                  left: `${start}%`,
-                  background: color as string,
-                }}
-              >
-                <span className="size-1.5 rounded-full bg-paper/80" />
-              </motion.div>
+            Start free trial
+            <ArrowRight className="size-4 transition-transform group-hover:translate-x-0.5" />
+          </Link>
+          <Link
+            href="/pricing"
+            className="inline-flex items-center rounded-xl border border-line bg-card px-5 py-3 text-[14.5px] font-bold text-ink shadow-card transition-colors hover:border-ink/30"
+          >
+            Talk to sales team
+          </Link>
+        </div>
+      </Reveal>
+
+      {/* realistic dashboard mockup */}
+      <Reveal delay={0.1} className="mt-14">
+        <div className="relative">
+          <div className="pointer-events-none absolute -inset-8 -z-10 rounded-[2.5rem] bg-gradient-to-tr from-signal/10 via-transparent to-[#7a3ff0]/10 blur-3xl" />
+          <div className="overflow-hidden rounded-2xl border border-line bg-card shadow-float ring-1 ring-black/[0.03]">
+            {/* window chrome */}
+            <div className="flex items-center gap-2 border-b border-line bg-paper-raised px-4 py-3">
+              <span className="flex gap-1.5">
+                <span className="size-2.5 rounded-full bg-[#ef4444]/60" />
+                <span className="size-2.5 rounded-full bg-[#f59e0b]/60" />
+                <span className="size-2.5 rounded-full bg-[#22c55e]/60" />
+              </span>
+              <span className="ml-3 hidden rounded-md border border-line bg-card px-3 py-1 text-[11px] text-ink-soft sm:block">
+                app.meridian.work/dashboard
+              </span>
             </div>
-          </motion.div>
-        ))}
-      </div>
-    </div>
-  );
-}
 
-/* ---------------- Dashboard ---------------- */
-const STATS = [
-  ["Velocity", "126", "+14%", "#2563eb"],
-  ["On-track", "82%", "+5%", "#22a06b"],
-  ["At-risk", "7", "-3", "#1d9aaa"],
-  ["Cycle time", "2.4d", "-0.6d", "#06b6d4"],
-] as const;
+            <div className="flex">
+              {/* sidebar */}
+              <aside className="hidden w-44 shrink-0 border-r border-line p-3 md:block">
+                <div className="flex items-center gap-2 px-1.5 py-1">
+                  <span className="grid size-6 place-items-center rounded-md bg-signal text-[11px] font-black text-white">
+                    M
+                  </span>
+                  <span className="text-[13px] font-bold text-ink">Meridian</span>
+                </div>
+                <nav className="mt-4 space-y-0.5">
+                  {NAV.map((n) => (
+                    <span
+                      key={n.label}
+                      className={
+                        n.active
+                          ? "flex items-center gap-2.5 rounded-lg bg-signal-soft px-2.5 py-2 text-[12.5px] font-semibold text-signal"
+                          : "flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-[12.5px] font-medium text-ink-soft"
+                      }
+                    >
+                      <n.icon className="size-4" strokeWidth={2} />
+                      {n.label}
+                    </span>
+                  ))}
+                </nav>
+              </aside>
 
-const BARS = [40, 62, 48, 78, 70, 92, 84];
+              {/* main */}
+              <div className="min-w-0 flex-1 p-4 sm:p-5">
+                {/* topbar */}
+                <div className="flex items-center justify-between gap-3">
+                  <div>
+                    <p className="text-[11px] font-semibold uppercase tracking-wide text-ink-soft">
+                      Project board
+                    </p>
+                    <h3 className="text-[17px] font-bold tracking-tight text-ink">
+                      Checklist — To-Dos
+                    </h3>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="hidden items-center gap-2 rounded-lg border border-line bg-card px-3 py-1.5 text-[12px] text-ink-soft sm:flex">
+                      <Search className="size-3.5" /> Search
+                    </span>
+                    <span className="grid size-8 place-items-center rounded-lg border border-line bg-card text-ink-soft">
+                      <Bell className="size-4" />
+                    </span>
+                    <Avatar initials="GK" hue="#2563eb" size={32} />
+                  </div>
+                </div>
 
-function DashboardView() {
-  return (
-    <div className="space-y-4">
-      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-        {STATS.map(([label, value, delta, accent], i) => (
-          <motion.div
-            key={label}
-            initial={{ opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.4, delay: i * 0.06, ease }}
-            className="rounded-sm border border-line bg-paper-raised p-4"
-          >
-            <p className="font-mono text-[10px] tracking-wider uppercase text-ink-soft">
-              {label}
-            </p>
-            <p className="tnum mt-2 font-display text-3xl font-bold tracking-tight text-ink">
-              {value}
-            </p>
-            <p
-              className="tnum mt-1 font-mono text-[11px]"
-              style={{ color: accent }}
-            >
-              {delta}
-            </p>
-          </motion.div>
-        ))}
-      </div>
-      <div className="grid grid-cols-1 gap-3 lg:grid-cols-3">
-        <div className="rounded-sm border border-line bg-paper-raised p-5 lg:col-span-2">
-          <div className="mb-4 flex items-center justify-between">
-            <span className="text-[12px] font-semibold text-ink">
-              Weekly throughput
-            </span>
-            <span className="font-mono text-[10px] tracking-wider uppercase text-ink-soft">
-              last 7 weeks
-            </span>
-          </div>
-          <div className="flex h-36 items-end gap-2.5">
-            {BARS.map((h, i) => {
-              const last = i === BARS.length - 1;
-              return (
-                <motion.div
-                  key={i}
-                  initial={{ height: 0 }}
-                  animate={{ height: `${h}%` }}
-                  transition={{ duration: 0.6, ease, delay: i * 0.05 }}
-                  className="flex-1 rounded-t-sm"
-                  style={{
-                    background: last
-                      ? "var(--signal)"
-                      : `color-mix(in srgb, #2563eb ${42 + i * 8}%, #06b6d4)`,
-                  }}
-                />
-              );
-            })}
+                {/* board */}
+                <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
+                  <Column title="To Do" count={TODO.length} cards={TODO} />
+                  <Column title="In Progress" count={PROGRESS.length} cards={PROGRESS} />
+                </div>
+              </div>
+            </div>
           </div>
         </div>
-        <div className="flex flex-col items-center justify-center rounded-sm border border-line bg-paper-raised p-5">
-          <Donut />
-          <p className="mt-3 font-mono text-[10px] tracking-wider uppercase text-ink-soft">
-            Status split
-          </p>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function Donut() {
-  const segments = [
-    { value: 62, color: "var(--signal)" },
-    { value: 24, color: "#06b6d4" },
-    { value: 14, color: "#22a06b" },
-  ];
-  const r = 42;
-  const c = 2 * Math.PI * r;
-  let offset = 0;
-  return (
-    <svg viewBox="0 0 120 120" className="size-32 -rotate-90">
-      <circle cx="60" cy="60" r={r} fill="none" stroke="var(--secondary)" strokeWidth="14" />
-      {segments.map((s, i) => {
-        const len = (s.value / 100) * c;
-        const el = (
-          <motion.circle
-            key={i}
-            cx="60"
-            cy="60"
-            r={r}
-            fill="none"
-            stroke={s.color}
-            strokeWidth="14"
-            strokeDasharray={`${len} ${c - len}`}
-            strokeDashoffset={-offset}
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            transition={{ delay: 0.2 + i * 0.15 }}
-          />
-        );
-        offset += len;
-        return el;
-      })}
-    </svg>
+      </Reveal>
+    </Section>
   );
 }

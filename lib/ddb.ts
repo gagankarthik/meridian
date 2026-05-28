@@ -48,6 +48,7 @@ export const key = {
   column: (wid: string, cid: string) => ({ PK: `WS#${wid}`, SK: `COLUMN#${cid}` }),
   approval: (wid: string, aid: string) => ({ PK: `WS#${wid}`, SK: `APPROVAL#${aid}` }),
   notification: (wid: string, nid: string) => ({ PK: `WS#${wid}`, SK: `NOTIF#${nid}` }),
+  attach: (wid: string, aid: string) => ({ PK: `WS#${wid}`, SK: `ATTACH#${aid}` }),
 };
 
 export type Item = Record<string, unknown>;

@@ -1,9 +1,8 @@
 import { SiteNav } from "@/components/marketing/nav";
-import { ScrollProgress } from "@/components/marketing/scroll-progress";
 import { Hero } from "@/components/marketing/hero";
-import { LogoMarquee } from "@/components/marketing/logo-marquee";
 import { Features } from "@/components/marketing/features";
 import { UseCases } from "@/components/marketing/use-cases";
+import { Solutions } from "@/components/marketing/solutions";
 import { WorkflowSection } from "@/components/marketing/workflow";
 import { Views } from "@/components/marketing/views";
 import { Testimonials } from "@/components/marketing/testimonials";
@@ -55,14 +54,13 @@ export default function Home() {
         type="application/ld+json"
         dangerouslySetInnerHTML={{ __html: JSON.stringify(JSON_LD) }}
       />
-      <ScrollProgress />
       <SiteNav />
-      <main>
+      <main id="main" tabIndex={-1} className="outline-none">
         <Hero />
-        <LogoMarquee />
         <Features />
-        <UseCases />
         <WorkflowSection />
+        <UseCases />
+        <Solutions />
         <Views />
         <Testimonials />
         <Security />

@@ -90,6 +90,13 @@ export default function RootLayout({
             __html: `(function(){try{var p=JSON.parse(localStorage.getItem('meridian.prefs')||'{}');var t=p.theme||'system';var d=t==='dark'||(t==='system'&&window.matchMedia&&window.matchMedia('(prefers-color-scheme: dark)').matches);document.documentElement.classList.toggle('dark',!!d);}catch(e){}})();`,
           }}
         />
+        {/* Skip link — first focusable element (WCAG 2.4.1 Bypass Blocks) */}
+        <a
+          href="#main"
+          className="sr-only z-[100] rounded-lg bg-ink px-4 py-2.5 text-[14px] font-bold text-paper shadow-float focus:not-sr-only focus:fixed focus:left-4 focus:top-4"
+        >
+          Skip to main content
+        </a>
         <ConfigureAmplify />
         {children}
         <CookieConsent />

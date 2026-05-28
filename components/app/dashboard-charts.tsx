@@ -34,19 +34,12 @@ import { cn } from "@/lib/utils";
 const ease = [0.16, 1, 0.3, 1] as const;
 
 /* ----------------------------- date helpers ------------------------------ */
-const MONTH_INDEX: Record<string, number> = {
-  jan: 0, feb: 1, mar: 2, apr: 3, may: 4, jun: 5,
-  jul: 6, aug: 7, sep: 8, oct: 9, nov: 10, dec: 11,
-};
-/* App reference "today" is 2026-05-27. Ordinal uses a 31-day/372-year scheme
-   so comparisons stay monotonic without a real Date parse. */
-const TODAY_ORD = 2026 * 372 + 4 * 31 + 27;
-function dueOrdinal(due: string): number | null {
-  const m = due.match(/^([A-Za-z]{3})\s+(\d{1,2}),\s*(\d{4})$/);
-  if (!m) return null;
-  const mo = MONTH_INDEX[m[1].toLowerCase()];
-  if (mo === undefined) return null;
-  return Number(m[3]) * 372 + mo * 31 + Number(m[2]);
+/* Real timestamp for a due string like "Jul 14, 2026" (null when it doesn't
+   parse / is the "—" placeholder). Used for ordering + overdue/upcoming KPIs. */
+function dueTime(due: string): number | null {
+  if (!due || due === "—") return null;
+  const t = new Date(due).getTime();
+  return Number.isNaN(t) ? null : t;
 }
 
 type Kpi = {
@@ -68,24 +61,32 @@ const STATUS_META: Record<string, { color: string }> = {
   review: { color: "#6e5dc6" },
   done: { color: "#22a06b" },
 };
-const PROGRESS_BY_COLUMN: Record<string, number> = {
-  backlog: 12, todo: 28, in_progress: 56, review: 84, done: 100,
-};
+/* Real per-task progress: done → 100%; otherwise the share of its subtasks
+   that are complete (0% when there are no subtasks to measure). */
+function taskProgress(t: Task): number {
+  if (t.column === "done") return 100;
+  const subs = t.subtasks ?? [];
+  if (subs.length === 0) return 0;
+  return Math.round((subs.filter((s) => s.done).length / subs.length) * 100);
+}
 
 /* --------------------------------- view ---------------------------------- */
 export function DashboardCharts() {
   const { tasks, projects } = useWorkspace();
+  /* Capture "now" once at mount (lazy init keeps render pure + stable). */
+  const [now] = useState(() => Date.now());
 
   const kpis = useMemo<Kpi[]>(() => {
+    const soon = now + 60 * 86400000; // next 60 days
     const done = tasks.filter((t) => t.column === "done").length;
     const notDone = tasks.filter((t) => t.column !== "done");
     const overdue = notDone.filter((t) => {
-      const o = dueOrdinal(t.due);
-      return o !== null && o < TODAY_ORD;
+      const o = dueTime(t.due);
+      return o !== null && o < now;
     }).length;
     const upcoming = notDone.filter((t) => {
-      const o = dueOrdinal(t.due);
-      return o !== null && o >= TODAY_ORD && o <= TODAY_ORD + 60;
+      const o = dueTime(t.due);
+      return o !== null && o >= now && o <= soon;
     }).length;
     return [
       { label: "Active Projects", value: projects.length, icon: Layers, accent: "#2563eb" },
@@ -94,12 +95,16 @@ export function DashboardCharts() {
       { label: "Upcoming Deadlines", value: upcoming, icon: CalendarClock, accent: "#6e5dc6" },
       { label: "Overdue Tasks", value: overdue, icon: TriangleAlert, accent: "#e34935" },
     ];
-  }, [tasks, projects]);
+  }, [tasks, projects, now]);
 
   const recent = useMemo(
     () =>
       [...tasks]
-        .sort((a, b) => (dueOrdinal(a.due) ?? 0) - (dueOrdinal(b.due) ?? 0))
+        .sort(
+          (a, b) =>
+            (dueTime(a.due) ?? Number.POSITIVE_INFINITY) -
+            (dueTime(b.due) ?? Number.POSITIVE_INFINITY),
+        )
         .slice(0, 6),
     [tasks],
   );
@@ -115,7 +120,7 @@ export function DashboardCharts() {
 
       {/* productivity (2/3) + all projects (1/3) */}
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
-        <ProductivityOverview hasData={tasks.length > 0} />
+        <ProductivityOverview tasks={tasks} now={now} />
         <ProjectsPanel projects={projects} />
       </div>
 
@@ -161,22 +166,109 @@ function KpiCard({ kpi, index }: { kpi: Kpi; index: number }) {
 /* -------------------------- productivity overview ------------------------- */
 const RANGES = ["Daily", "Weekly", "Monthly", "Yearly"] as const;
 type Range = (typeof RANGES)[number];
-const RANGE_DATA: Record<Range, { labels: string[]; seed: number }> = {
-  Daily: { labels: ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"], seed: 7 },
-  Weekly: { labels: ["W1", "W2", "W3", "W4", "W5", "W6"], seed: 13 },
-  Monthly: { labels: ["Jan", "Feb", "Mar", "Apr", "May", "Jun"], seed: 23 },
-  Yearly: { labels: ["Q1", "Q2", "Q3", "Q4"], seed: 41 },
+
+const WEEKDAY_SHORT = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+const MONTH_SHORT = [
+  "Jan", "Feb", "Mar", "Apr", "May", "Jun",
+  "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
+];
+
+/* Parse a due string like "Jul 14, 2026" → Date (or null when it doesn't
+   parse / is the "—" placeholder). */
+function parseDue(due: string): Date | null {
+  if (!due || due === "—") return null;
+  const d = new Date(due);
+  return Number.isNaN(d.getTime()) ? null : d;
+}
+
+type Bucket = {
+  label: string;
+  /** completion % of tasks due in this window (0 when the window is empty) */
+  value: number;
+  completed: number;
+  overdue: number;
+  total: number;
 };
 
-/* deterministic productivity %s in the 60–94 band */
-function seededPct(seed: number, n: number) {
-  const out: number[] = [];
-  let s = seed * 9301 + 49297;
-  for (let i = 0; i < n; i++) {
-    s = (s * 9301 + 49297) % 233280;
-    out.push(Math.round(60 + (s / 233280) * 34));
+/* Bucket real tasks by their due date across the selected range, relative to
+   `now`. Each bucket's value is the share of its tasks that are done. */
+function buildBuckets(tasks: Task[], range: Range, now: Date): Bucket[] {
+  type Acc = { label: string; total: number; done: number; overdue: number };
+  const buckets: Acc[] = [];
+  const y = now.getFullYear();
+  const m = now.getMonth();
+  const d = now.getDate();
+
+  // start-of-day reference for each bucket window
+  if (range === "Daily") {
+    for (let i = 6; i >= 0; i--) {
+      const day = new Date(y, m, d - i);
+      buckets.push({ label: WEEKDAY_SHORT[day.getDay()], total: 0, done: 0, overdue: 0 });
+    }
+  } else if (range === "Weekly") {
+    for (let i = 5; i >= 0; i--) {
+      buckets.push({ label: `W${6 - i}`, total: 0, done: 0, overdue: 0 });
+    }
+  } else if (range === "Monthly") {
+    for (let i = 5; i >= 0; i--) {
+      const mo = new Date(y, m - i, 1);
+      buckets.push({ label: MONTH_SHORT[mo.getMonth()], total: 0, done: 0, overdue: 0 });
+    }
+  } else {
+    for (let i = 3; i >= 0; i--) {
+      const q = Math.floor(m / 3) - i;
+      const qi = ((q % 4) + 4) % 4;
+      buckets.push({ label: `Q${qi + 1}`, total: 0, done: 0, overdue: 0 });
+    }
   }
-  return out;
+
+  // index of the bucket a given due date falls into, or -1 if outside the window
+  function bucketIndex(due: Date): number {
+    if (range === "Daily") {
+      const diff = Math.floor(
+        (new Date(y, m, d).getTime() - new Date(due.getFullYear(), due.getMonth(), due.getDate()).getTime()) /
+          86400000,
+      );
+      return diff >= 0 && diff <= 6 ? 6 - diff : -1;
+    }
+    if (range === "Weekly") {
+      const startDay = new Date(y, m, d);
+      const diffDays = Math.floor(
+        (startDay.getTime() - new Date(due.getFullYear(), due.getMonth(), due.getDate()).getTime()) / 86400000,
+      );
+      if (diffDays < 0) return -1;
+      const wk = Math.floor(diffDays / 7);
+      return wk <= 5 ? 5 - wk : -1;
+    }
+    if (range === "Monthly") {
+      const diff = (y - due.getFullYear()) * 12 + (m - due.getMonth());
+      return diff >= 0 && diff <= 5 ? 5 - diff : -1;
+    }
+    // Yearly → trailing 4 quarters
+    const nowQ = y * 4 + Math.floor(m / 3);
+    const dueQ = due.getFullYear() * 4 + Math.floor(due.getMonth() / 3);
+    const diff = nowQ - dueQ;
+    return diff >= 0 && diff <= 3 ? 3 - diff : -1;
+  }
+
+  for (const t of tasks) {
+    const due = parseDue(t.due);
+    if (!due) continue;
+    const idx = bucketIndex(due);
+    if (idx < 0) continue;
+    const b = buckets[idx];
+    b.total += 1;
+    if (t.column === "done") b.done += 1;
+    else if (due.getTime() < now.getTime()) b.overdue += 1;
+  }
+
+  return buckets.map((b) => ({
+    label: b.label,
+    value: b.total === 0 ? 0 : Math.round((b.done / b.total) * 100),
+    completed: b.done,
+    overdue: b.overdue,
+    total: b.total,
+  }));
 }
 
 /* smooth path (Catmull-Rom → cubic bezier) through [x,y] points */
@@ -197,17 +289,24 @@ function smooth(pts: [number, number][]) {
   return d;
 }
 
-function ProductivityOverview({ hasData }: { hasData: boolean }) {
+function ProductivityOverview({ tasks, now }: { tasks: Task[]; now: number }) {
   const [range, setRange] = useState<Range>("Weekly");
-  const { labels, seed } = RANGE_DATA[range];
-  const values = useMemo(() => seededPct(seed, labels.length), [seed, labels.length]);
+  const buckets = useMemo(
+    () => buildBuckets(tasks, range, new Date(now)),
+    [tasks, range, now],
+  );
+  const labels = buckets.map((b) => b.label);
+  const values = buckets.map((b) => b.value);
 
-  /* default the highlight to the peak day */
-  const peak = values.indexOf(Math.max(...values));
+  /* default the highlight to the latest bucket that actually has tasks */
+  const lastWithData = (() => {
+    for (let i = buckets.length - 1; i >= 0; i--) if (buckets[i].total > 0) return i;
+    return buckets.length - 1;
+  })();
   const [hover, setHover] = useState<number | null>(null);
-  const active = hover ?? peak;
+  const active = hover ?? lastWithData;
 
-  if (!hasData) {
+  if (tasks.length === 0) {
     return (
       <section className="grid min-h-[18rem] place-items-center rounded-2xl border border-line bg-card p-5 text-center shadow-card lg:col-span-2">
         <div>
@@ -230,11 +329,19 @@ function ProductivityOverview({ hasData }: { hasData: boolean }) {
   const linePath = smooth(pts);
   const areaPath = `${linePath} L ${pts[n - 1][0].toFixed(2)} 100 L ${pts[0][0].toFixed(2)} 100 Z`;
 
-  const avg = Math.round(values.reduce((s, v) => s + v, 0) / n);
+  /* headline = overall completion rate across all tasks (real) */
+  const totalDone = tasks.filter((t) => t.column === "done").length;
+  const overallPct = tasks.length === 0 ? 0 : Math.round((totalDone / tasks.length) * 100);
+
+  /* delta = latest non-empty bucket value minus the previous non-empty one */
+  const filled = buckets.filter((b) => b.total > 0);
+  const delta =
+    filled.length >= 2 ? filled[filled.length - 1].value - filled[filled.length - 2].value : null;
+
   const ax = pts[active][0];
   const ay = pts[active][1];
-  const completed = Math.round((values[active] / 100) * 22);
-  const overdue = Math.max(0, Math.round(((100 - values[active]) / 100) * 9));
+  const completed = buckets[active].completed;
+  const overdue = buckets[active].overdue;
   const tipRight = ax > 62;
 
   return (
@@ -251,13 +358,26 @@ function ProductivityOverview({ hasData }: { hasData: boolean }) {
           </h2>
           <div className="mt-1.5 flex items-center gap-2">
             <span className="tnum font-display text-2xl font-extrabold tracking-tight text-ink">
-              {avg}%
+              {overallPct}%
             </span>
-            <span className="inline-flex items-center gap-0.5 rounded-full bg-emerald-500/12 px-1.5 py-0.5 text-[11px] font-bold text-emerald-700 dark:text-emerald-300">
-              <ArrowUpRight className="size-3" strokeWidth={2.4} />
-              +7%
-            </span>
-            <span className="text-[12px] text-ink-soft">avg / period</span>
+            {delta !== null && delta !== 0 && (
+              <span
+                className={cn(
+                  "inline-flex items-center gap-0.5 rounded-full px-1.5 py-0.5 text-[11px] font-bold",
+                  delta > 0
+                    ? "bg-emerald-500/12 text-emerald-700 dark:text-emerald-300"
+                    : "bg-red-500/12 text-red-700 dark:text-red-300",
+                )}
+              >
+                <ArrowUpRight
+                  className={cn("size-3", delta < 0 && "rotate-90")}
+                  strokeWidth={2.4}
+                />
+                {delta > 0 ? "+" : "−"}
+                {Math.abs(delta)}%
+              </span>
+            )}
+            <span className="text-[12px] text-ink-soft">completion rate</span>
           </div>
         </div>
 
@@ -534,7 +654,7 @@ function RecentTasks({ tasks }: { tasks: Task[] }) {
           const assignee = memberById(t.assigneeId);
           const project = projectById(t.projectId);
           const meta = STATUS_META[t.column] ?? STATUS_META.todo;
-          const pct = PROGRESS_BY_COLUMN[t.column] ?? 30;
+          const pct = taskProgress(t);
           return (
             <button
               key={t.id}

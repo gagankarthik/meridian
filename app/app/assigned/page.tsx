@@ -1,7 +1,6 @@
-import { MyTasksList } from "@/components/app/my-tasks-list";
+import { redirect } from "next/navigation";
 
-export const metadata = { title: "Assigned to me" };
-
+// Consolidated into the single "My Tasks" view with tabs.
 export default function AssignedPage() {
-  return <MyTasksList mode="assigned" />;
+  redirect("/app/my-tasks?view=assigned");
 }

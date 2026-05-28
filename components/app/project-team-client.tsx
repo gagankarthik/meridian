@@ -91,7 +91,11 @@ export function ProjectTeamClient({ projectId }: { projectId: string }) {
           (t) => t.projectId === projectId && t.assigneeIds.includes(m.id),
         ).length,
       }));
-  }, [projectId, ws.tasks]);
+    // `projectMemberIds`/`projectRole`/`memberById` read the runtime store that
+    // mirrors ws.projects + ws.members, so recompute when those change too —
+    // otherwise a project-role change or "remove from project" wouldn't reflect
+    // until an unrelated tasks update happened to retrigger this memo.
+  }, [projectId, ws.tasks, ws.projects, ws.members]);
 
   const allRows = useMemo(
     () => [
@@ -138,11 +142,21 @@ export function ProjectTeamClient({ projectId }: { projectId: string }) {
 
   function removeFromProject(memberId: string) {
     if (project) {
+      // Take them off THIS project's team only…
       ws.updateProject(project.id, {
         leadIds: project.leadIds.filter((x) => x !== memberId),
         reviewerIds: project.reviewerIds.filter((x) => x !== memberId),
         memberIds: project.memberIds.filter((x) => x !== memberId),
       });
+      // …and revoke this project from their personal access list, so removal is
+      // complete. They REMAIN a workspace member (still on the Team page) —
+      // removing from a project must never delete the person from the workspace.
+      const member = ws.members.find((m) => m.id === memberId);
+      if (member?.projects?.includes(project.id)) {
+        ws.updateMember(memberId, {
+          projects: member.projects.filter((p) => p !== project.id),
+        });
+      }
     }
     setInvites((list) => list.filter((iv) => iv.member.id !== memberId));
     setRemoveFor(null);

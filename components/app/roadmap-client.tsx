@@ -1,17 +1,32 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import Link from "next/link";
-import { ArrowRight, CalendarRange, Flag, TrendingUp } from "lucide-react";
+import {
+  ArrowUpRight,
+  CalendarRange,
+  CircleDot,
+  ExternalLink,
+  Layers,
+  TrendingUp,
+  Users,
+} from "lucide-react";
+import {
+  addQuarters,
+  differenceInCalendarDays,
+  endOfQuarter,
+  max as maxDate,
+  min as minDate,
+  startOfQuarter,
+} from "date-fns";
 import { memberById, projectMemberIds } from "@/lib/app-data";
 import type { Project } from "@/lib/app-data";
 import {
-  Avatar,
   AvatarStack,
+  MemberAvatar,
   ProgressBar,
-  ProjectAvatar,
-  StatusChip,
 } from "@/components/app/widgets";
+import { useWorkspace } from "@/components/app/workspace";
 import {
   Sheet,
   SheetContent,
@@ -19,60 +34,48 @@ import {
   SheetHeader,
   SheetTitle,
 } from "@/components/ui/sheet";
-import { useWorkspace } from "@/components/app/workspace";
 import { projectHref, useDefaultProjectView } from "@/lib/preferences";
+import { cn } from "@/lib/utils";
 
-/* ---- Quarter track ---------------------------------------------------- */
+/* ---- Helpers ---------------------------------------------------------- */
 
-const QUARTERS = ["Q2 2026", "Q3 2026", "Q4 2026", "Q1 2027"] as const;
-const QUARTER_COUNT = QUARTERS.length;
-
-/** "Now" sits a touch into Q3 2026 (index 1 of 4) on the 0–100 track. */
-const NOW_PCT = ((1 + 0.4) / QUARTER_COUNT) * 100;
-
-/** Fallback span derived deterministically from the project id. */
-function fallbackSpan(p: Project): { startQ: number; endQ: number } {
-  const n = Number(p.id.replace(/\D/g, "")) || 1;
-  const startQ = n % QUARTER_COUNT;
-  const endQ = Math.min(QUARTER_COUNT - 1, startQ + 1);
-  return { startQ, endQ };
-}
-
-/** Quarter index (0–3) for an ISO date on the track that starts 2026-04. */
-function quarterIndexForDate(iso: string): number | null {
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return null;
-  const months = (d.getFullYear() - 2026) * 12 + (d.getMonth() - 3);
-  const qi = Math.floor(months / 3);
-  return Math.max(0, Math.min(QUARTER_COUNT - 1, qi));
-}
-
-/** Span across the quarter track — from the project's real dates when set. */
-function spanFor(p: Project): { startQ: number; endQ: number; real: boolean } {
-  const s = p.startDate ? quarterIndexForDate(p.startDate) : null;
-  const e = p.endDate ? quarterIndexForDate(p.endDate) : null;
-  if (s !== null || e !== null) {
-    const startQ = s ?? e ?? 0;
-    const endQ = Math.max(startQ, e ?? s ?? startQ);
-    return { startQ, endQ, real: true };
+/** Status pill palette: On track → green, At risk → amber, Off track → red. */
+function statusPillClass(status: Project["status"]): string {
+  switch (status) {
+    case "On track":
+      return "border-green-100 bg-green-50 text-green-700 dark:border-green-400/20 dark:bg-green-400/10 dark:text-green-300";
+    case "At risk":
+      return "border-amber-100 bg-amber-50 text-amber-700 dark:border-amber-400/20 dark:bg-amber-400/10 dark:text-amber-300";
+    case "Off track":
+      return "border-red-100 bg-red-50 text-red-700 dark:border-red-400/20 dark:bg-red-400/10 dark:text-red-300";
+    default:
+      return "border-line bg-secondary text-ink-muted";
   }
-  return { ...fallbackSpan(p), real: false };
 }
 
-function geometry(startQ: number, endQ: number) {
-  const left = (startQ / QUARTER_COUNT) * 100;
-  const width = ((endQ - startQ + 1) / QUARTER_COUNT) * 100;
-  return { left, width };
+function StatusPill({ status }: { status: Project["status"] }) {
+  return (
+    <span
+      className={cn(
+        "inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] font-semibold",
+        statusPillClass(status),
+      )}
+    >
+      <span className="size-1.5 rounded-full bg-current opacity-80" />
+      {status}
+    </span>
+  );
 }
 
-function quarterLabel(i: number) {
-  return QUARTERS[Math.max(0, Math.min(QUARTER_COUNT - 1, i))];
-}
-
-function fmtDate(iso?: string) {
+function parseISO(iso?: string): Date | null {
   if (!iso) return null;
   const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return null;
+  return Number.isNaN(d.getTime()) ? null : d;
+}
+
+function fmtDate(iso?: string): string | null {
+  const d = parseISO(iso);
+  if (!d) return null;
   return d.toLocaleDateString("en-US", {
     month: "short",
     day: "numeric",
@@ -80,274 +83,497 @@ function fmtDate(iso?: string) {
   });
 }
 
-/* ---- Bar -------------------------------------------------------------- */
+/** Schedule label "start — end", falling back gracefully when partial/absent. */
+function scheduleLabel(p: Project): string {
+  const s = fmtDate(p.startDate);
+  const e = fmtDate(p.endDate);
+  if (s && e) return `${s} — ${e}`;
+  if (s) return `From ${s}`;
+  if (e) return `Until ${e}`;
+  return "No schedule";
+}
 
-function RoadmapBar({
-  project,
-  onSelect,
-}: {
-  project: Project;
-  onSelect: (p: Project) => void;
-}) {
-  const { startQ, endQ } = spanFor(project);
-  const { left, width } = geometry(startQ, endQ);
-  const barColor = `color-mix(in srgb, ${project.color} 82%, white)`;
-  const lead = project.leadIds[0] ? memberById(project.leadIds[0]) : undefined;
+function quarterLabel(d: Date): string {
+  const q = Math.floor(d.getMonth() / 3) + 1;
+  return `Q${q} ${d.getFullYear()}`;
+}
 
-  return (
-    <div className="relative flex-1 py-3">
-      {/* quarter gridlines */}
-      <div className="pointer-events-none absolute inset-0 z-0 grid grid-cols-4">
-        {QUARTERS.map((q, j) => (
-          <div key={q} className={j === 0 ? "" : "border-l border-line/60"} />
-        ))}
-      </div>
+/* ---- Timeline math ---------------------------------------------------- */
 
-      {/* bar — click opens the detail sheet (no clipped hover tooltip) */}
-      <div
-        className="relative z-[1]"
-        style={{ marginLeft: `${left}%`, width: `${width}%` }}
-      >
-        <button
-          type="button"
-          onClick={() => onSelect(project)}
-          title={`${project.name} — ${quarterLabel(startQ)} → ${quarterLabel(endQ)}`}
-          className="flex h-9 w-full items-center gap-2 overflow-hidden rounded-lg px-2.5 text-left shadow-card transition-transform hover:scale-[1.01] focus:outline-none focus-visible:ring-2 focus-visible:ring-ink/40"
-          style={{ background: barColor }}
-        >
-          {lead && (
-            <span className="shrink-0 rounded-full ring-2 ring-white/30">
-              <Avatar
-                initials={lead.initials}
-                hue={lead.hue}
-                seed={lead.initials}
-                src={lead.avatar}
-                size={20}
-              />
-            </span>
-          )}
-          <span className="min-w-0 flex-1 truncate text-[11.5px] font-semibold text-white">
-            {project.name}
-          </span>
-          <span className="tnum shrink-0 text-[11px] font-bold text-white/90">
-            {project.progress}%
-          </span>
-        </button>
-      </div>
+type Quarter = { start: Date; end: Date; label: string };
 
-      {/* now line */}
-      <div
-        className="pointer-events-none absolute inset-y-0 z-[2] w-px bg-signal/50"
-        style={{ left: `${NOW_PCT}%` }}
-      />
-    </div>
-  );
+/**
+ * Build the quarter columns spanning every project's real schedule, padded to
+ * always include the current quarter so unscheduled work has a home column.
+ */
+function buildQuarters(projects: Project[]): Quarter[] {
+  const dates: Date[] = [new Date()];
+  for (const p of projects) {
+    const s = parseISO(p.startDate);
+    const e = parseISO(p.endDate);
+    if (s) dates.push(s);
+    if (e) dates.push(e);
+  }
+  const spanStart = startOfQuarter(minDate(dates));
+  const spanEnd = endOfQuarter(maxDate(dates));
+
+  const quarters: Quarter[] = [];
+  let cursor = spanStart;
+  // Guard against runaway loops on bad data.
+  while (cursor <= spanEnd && quarters.length < 40) {
+    const end = endOfQuarter(cursor);
+    quarters.push({ start: cursor, end, label: quarterLabel(cursor) });
+    cursor = addQuarters(cursor, 1);
+  }
+  return quarters;
+}
+
+type BarGeometry = { leftPct: number; widthPct: number; scheduled: boolean };
+
+/**
+ * Position a project's bar across the quarter axis as left/width percentages.
+ * Unscheduled projects fall back to a compact bar in the current quarter.
+ */
+function barGeometry(p: Project, quarters: Quarter[]): BarGeometry {
+  const axisStart = quarters[0].start;
+  const axisEnd = quarters[quarters.length - 1].end;
+  const totalDays = Math.max(1, differenceInCalendarDays(axisEnd, axisStart));
+
+  const s = parseISO(p.startDate);
+  const e = parseISO(p.endDate);
+
+  if (!s && !e) {
+    // No schedule → small bar parked at the start of the current quarter.
+    const now = startOfQuarter(new Date());
+    const offset = differenceInCalendarDays(now, axisStart);
+    const leftPct = (offset / totalDays) * 100;
+    return { leftPct: Math.max(0, leftPct), widthPct: 6, scheduled: false };
+  }
+
+  const barStart = s ?? e!;
+  const barEnd = e ?? s!;
+  const startOffset = differenceInCalendarDays(barStart, axisStart);
+  const span = Math.max(1, differenceInCalendarDays(barEnd, barStart));
+
+  const leftPct = (startOffset / totalDays) * 100;
+  const widthPct = (span / totalDays) * 100;
+  return {
+    leftPct: Math.max(0, Math.min(100, leftPct)),
+    widthPct: Math.max(3, Math.min(100 - Math.max(0, leftPct), widthPct)),
+    scheduled: true,
+  };
 }
 
 /* ---- Page ------------------------------------------------------------- */
 
 export function RoadmapClient() {
-  const { projects } = useWorkspace();
+  const ws = useWorkspace();
   const defaultView = useDefaultProjectView();
-  const [selected, setSelected] = useState<Project | null>(null);
-  const onTrack = projects.filter((p) => p.status === "On track").length;
-  const atRisk = projects.filter(
-    (p) => p.status === "At risk" || p.status === "Off track",
-  ).length;
+  const [activeId, setActiveId] = useState<string | null>(null);
 
-  const sel = selected
-    ? projects.find((p) => p.id === selected.id) ?? selected
+  // Aggregate stats computed from real workspace data.
+  const total = ws.projects.length;
+  const activeCount = ws.projects.filter((p) => p.status === "On track").length;
+  const openTasks = ws.tasks.filter((t) => t.column !== "done").length;
+  const avgComplete =
+    total === 0
+      ? 0
+      : Math.round(
+          ws.projects.reduce((sum, p) => sum + (p.progress ?? 0), 0) / total,
+        );
+
+  // Featured = furthest-along project; lanes follow start date then progress.
+  const ordered = useMemo(
+    () => [...ws.projects].sort((a, b) => b.progress - a.progress),
+    [ws.projects],
+  );
+  const featured = ordered[0];
+
+  const lanes = useMemo(
+    () =>
+      [...ws.projects].sort((a, b) => {
+        const sa = parseISO(a.startDate)?.getTime() ?? Infinity;
+        const sb = parseISO(b.startDate)?.getTime() ?? Infinity;
+        if (sa !== sb) return sa - sb;
+        return b.progress - a.progress;
+      }),
+    [ws.projects],
+  );
+
+  const quarters = useMemo(() => buildQuarters(ws.projects), [ws.projects]);
+
+  const active = activeId
+    ? (ws.projects.find((p) => p.id === activeId) ?? null)
     : null;
-  const span = sel ? spanFor(sel) : null;
-  const memberIds = sel ? projectMemberIds(sel.id) : [];
-  const lead = sel?.leadIds[0] ? memberById(sel.leadIds[0]) : undefined;
+
+  if (total === 0) {
+    return (
+      <div className="p-5 sm:p-6 lg:p-8">
+        <PortfolioHeader />
+        <div className="mt-16 grid place-items-center rounded-2xl border border-line bg-card p-12 text-center shadow-card">
+          <div className="grid size-12 place-items-center rounded-2xl bg-secondary text-ink-soft">
+            <Layers className="size-6" strokeWidth={1.6} />
+          </div>
+          <h3 className="mt-4 font-display text-lg font-bold text-ink">
+            No initiatives yet
+          </h3>
+          <p className="mt-1.5 max-w-sm text-[13.5px] text-ink-soft">
+            Create a project to see it take shape on the portfolio roadmap.
+          </p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="p-5 sm:p-6 lg:p-8">
-      {/* header */}
-      <div className="flex flex-wrap items-end justify-between gap-4">
-        <div>
-          <p className="text-[12px] font-semibold uppercase tracking-wide text-ink-soft">
-            Portfolio
-          </p>
-          <h1 className="mt-1.5 font-display text-3xl font-extrabold tracking-tight text-ink">
-            Roadmap
-          </h1>
-          <p className="mt-1.5 max-w-xl text-[13.5px] text-ink-soft">
-            How every initiative lines up across the next four quarters. Click a
-            bar to see its details.
-          </p>
-        </div>
+      <PortfolioHeader />
 
-        <div className="flex gap-3">
-          <div className="rounded-xl border border-line bg-card px-4 py-2.5 shadow-card">
-            <p className="text-[11px] font-semibold text-ink-soft">On track</p>
-            <p className="tnum mt-0.5 font-display text-xl font-extrabold text-emerald-700 dark:text-emerald-300">
-              {onTrack}
+      {/* Compact stats strip — kept to a single row so the timeline leads. */}
+      <div className="mt-6 grid grid-cols-1 gap-4 lg:grid-cols-12">
+        {/* Dark stats card */}
+        <div className="relative col-span-1 flex items-center justify-between gap-6 overflow-hidden rounded-2xl bg-ink p-5 text-paper shadow-float lg:col-span-7">
+          <div className="pointer-events-none absolute -top-12 -right-10 size-44 rounded-full bg-signal/40 blur-3xl" />
+          <div className="relative">
+            <p className="text-[11px] font-semibold tracking-wide text-paper/60 uppercase">
+              Portfolio health
+            </p>
+            <p className="tnum mt-2 font-display text-4xl font-extrabold tracking-tight lg:text-5xl">
+              {avgComplete}%
+            </p>
+            <p className="mt-1 text-[12.5px] text-paper/70">
+              Avg. completion across {total} initiative
+              {total === 1 ? "" : "s"}
             </p>
           </div>
-          <div className="rounded-xl border border-line bg-card px-4 py-2.5 shadow-card">
-            <p className="text-[11px] font-semibold text-ink-soft">At risk</p>
-            <p className="tnum mt-0.5 font-display text-xl font-extrabold text-amber-700 dark:text-amber-300">
-              {atRisk}
-            </p>
+          <div className="relative grid shrink-0 grid-cols-2 gap-3">
+            <SideStat label="Active" value={activeCount} />
+            <SideStat label="Open tasks" value={openTasks} />
           </div>
         </div>
+
+        {/* Featured initiative mini-card */}
+        <button
+          type="button"
+          onClick={() => setActiveId(featured.id)}
+          className="group col-span-1 flex flex-col rounded-2xl border border-line bg-card p-5 text-left shadow-card transition-all hover:shadow-raised focus:outline-none focus-visible:ring-2 focus-visible:ring-signal/40 lg:col-span-5"
+        >
+          <div className="flex items-center justify-between gap-2">
+            <span className="inline-flex items-center gap-1.5 rounded-full border border-line bg-paper-raised px-2.5 py-1 font-mono text-[10px] font-semibold tracking-wide text-ink-soft">
+              <CircleDot className="size-3" />
+              {featured.key} · Featured
+            </span>
+            <StatusPill status={featured.status} />
+          </div>
+          <h3 className="mt-3 truncate font-display text-lg font-bold tracking-tight text-ink">
+            {featured.name}
+          </h3>
+          <div className="mt-auto flex items-center gap-3 pt-4">
+            <span className="grow">
+              <ProgressBar value={featured.progress} color={featured.color} />
+            </span>
+            <span className="tnum text-[12.5px] font-semibold text-ink">
+              {featured.progress}%
+            </span>
+            <ArrowUpRight className="size-4 text-ink-soft transition-transform group-hover:translate-x-0.5 group-hover:-translate-y-0.5" />
+          </div>
+        </button>
       </div>
 
-      {/* legend */}
-      <div className="mt-4 flex flex-wrap items-center gap-x-5 gap-y-2 text-[11.5px] text-ink-soft">
-        <span className="inline-flex items-center gap-1.5">
-          <span className="h-2.5 w-5 rounded-sm bg-signal-soft" />
-          Project span
-        </span>
-        <span className="inline-flex items-center gap-1.5">
-          <span className="h-3 w-px bg-signal/60" />
-          Now
-        </span>
-      </div>
+      {/* Quarter timeline / swimlane — the centerpiece. */}
+      <div className="mt-6 overflow-hidden rounded-2xl border border-line bg-card shadow-card">
+        <div className="flex items-center justify-between gap-3 border-b border-line px-5 py-3.5">
+          <h3 className="inline-flex items-center gap-2 font-display text-[15px] font-bold tracking-tight text-ink">
+            <TrendingUp className="size-4 text-ink-soft" />
+            Initiative Timeline
+          </h3>
+          <span className="hidden text-[12px] text-ink-soft sm:inline">
+            {quarters[0].label} — {quarters[quarters.length - 1].label}
+          </span>
+        </div>
 
-      {/* gantt */}
-      {projects.length === 0 ? (
-        <p className="mt-6 rounded-2xl border border-line bg-card p-8 text-center text-[13px] text-ink-soft shadow-card">
-          No projects yet. Create one to see it on the roadmap.
-        </p>
-      ) : (
-        <div className="mt-5 overflow-x-auto">
-          <div className="min-w-[820px] rounded-2xl border border-line bg-card shadow-card">
-            {/* quarter header */}
-            <div className="flex rounded-t-2xl border-b border-line bg-paper-raised">
-              <div className="flex w-60 shrink-0 items-center gap-1.5 rounded-tl-2xl border-r border-line px-4 py-2.5 text-[11px] font-bold uppercase tracking-wide text-ink-soft">
-                <TrendingUp className="size-3.5" />
+        <div className="overflow-x-auto">
+          <div className="min-w-[760px]">
+            {/* Quarter axis header */}
+            <div className="flex border-b border-line bg-sunken">
+              <div className="w-56 shrink-0 border-r border-line px-5 py-2.5 text-[11px] font-bold tracking-wide text-ink-soft uppercase">
                 Initiative
               </div>
-              <div className="grid flex-1 grid-cols-4">
-                {QUARTERS.map((q, j) => (
+              <div className="flex grow">
+                {quarters.map((q) => (
                   <div
-                    key={q}
-                    className={[
-                      "px-3 py-2.5 text-[11px] font-bold uppercase tracking-wide text-ink-soft",
-                      j === 0 ? "" : "border-l border-line/60",
-                    ].join(" ")}
+                    key={q.label}
+                    className="grow border-r border-line px-3 py-2.5 text-[11px] font-bold tracking-wide text-ink-soft uppercase last:border-r-0"
                   >
-                    {q}
+                    {q.label}
                   </div>
                 ))}
               </div>
             </div>
 
-            {/* swimlanes */}
-            {projects.map((p, i) => (
-              <div
-                key={p.id}
-                className={[
-                  "flex items-stretch border-b border-line last:border-b-0",
-                  i === projects.length - 1 ? "rounded-b-2xl" : "",
-                ].join(" ")}
-              >
-                <div className="flex w-60 shrink-0 items-center gap-2.5 border-r border-line px-4 py-3">
-                  <ProjectAvatar seed={p.name} size={28} rounded="rounded-lg" />
-                  <div className="min-w-0 flex-1">
-                    <p className="truncate text-[12.5px] font-semibold text-ink">
-                      {p.name}
-                    </p>
-                    <p className="mt-1 flex items-center gap-1.5">
-                      <span className="font-mono text-[10px] text-ink-soft">
+            {/* Swimlane rows */}
+            {lanes.map((p) => {
+              const lead = p.leadIds[0] ? memberById(p.leadIds[0]) : undefined;
+              const geo = barGeometry(p, quarters);
+              const isActive = p.id === activeId;
+              return (
+                <div
+                  key={p.id}
+                  className={cn(
+                    "group flex border-b border-line transition-colors last:border-b-0 hover:bg-paper-raised",
+                    isActive && "bg-paper-raised",
+                  )}
+                >
+                  {/* Frozen-ish left column: name + lead */}
+                  <button
+                    type="button"
+                    onClick={() => setActiveId(p.id)}
+                    className="flex w-56 shrink-0 items-center gap-2.5 border-r border-line px-5 py-3.5 text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-signal/40 focus-visible:ring-inset"
+                  >
+                    {lead ? (
+                      <MemberAvatar member={lead} size={26} />
+                    ) : (
+                      <span
+                        className="grid size-[26px] shrink-0 place-items-center rounded-full bg-secondary text-ink-soft"
+                        title="Unassigned"
+                      >
+                        <Users className="size-3.5" />
+                      </span>
+                    )}
+                    <span className="min-w-0">
+                      <span className="block truncate text-[13px] font-semibold text-ink">
+                        {p.name}
+                      </span>
+                      <span className="block truncate font-mono text-[10.5px] text-ink-soft">
                         {p.key}
                       </span>
-                      <StatusChip status={p.status} />
-                    </p>
+                    </span>
+                  </button>
+
+                  {/* Bar track across the quarter axis */}
+                  <div className="relative flex grow items-center px-3 py-3.5">
+                    {/* Quarter gridlines */}
+                    <div className="pointer-events-none absolute inset-0 flex">
+                      {quarters.map((q) => (
+                        <div
+                          key={q.label}
+                          className="grow border-r border-line/60 last:border-r-0"
+                        />
+                      ))}
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={() => setActiveId(p.id)}
+                      title={`${p.name} · ${scheduleLabel(p)}`}
+                      style={{
+                        marginLeft: `${geo.leftPct}%`,
+                        width: `${geo.widthPct}%`,
+                      }}
+                      className={cn(
+                        "relative z-10 flex h-9 min-w-9 items-center overflow-hidden rounded-lg border text-left shadow-card transition-all hover:shadow-raised focus:outline-none focus-visible:ring-2 focus-visible:ring-signal/40",
+                        geo.scheduled
+                          ? "border-line/60"
+                          : "border-dashed border-line",
+                        isActive && "ring-2 ring-signal/50",
+                      )}
+                    >
+                      {geo.scheduled ? (
+                        <>
+                          {/* Track tint + progress fill, colored by project */}
+                          <span
+                            className="absolute inset-0 opacity-25"
+                            style={{ background: p.color }}
+                          />
+                          <span
+                            className="absolute inset-y-0 left-0 opacity-90"
+                            style={{
+                              width: `${p.progress}%`,
+                              background: p.color,
+                            }}
+                          />
+                          <span className="relative z-10 flex w-full items-center gap-1.5 px-2.5">
+                            <span className="truncate text-[11px] font-bold text-white mix-blend-luminosity drop-shadow">
+                              {p.progress}%
+                            </span>
+                          </span>
+                        </>
+                      ) : (
+                        <span className="relative z-10 flex w-full items-center justify-center bg-secondary px-2 text-[10px] font-semibold whitespace-nowrap text-ink-soft">
+                          No schedule
+                        </span>
+                      )}
+                    </button>
                   </div>
                 </div>
-
-                <RoadmapBar project={p} onSelect={setSelected} />
-              </div>
-            ))}
+              );
+            })}
           </div>
         </div>
-      )}
+      </div>
 
-      <p className="mt-3 inline-flex items-center gap-1.5 text-[11.5px] text-ink-soft">
-        <Flag className="size-3" />
-        Set each project&apos;s start &amp; end dates in its Settings tab to
-        position it here.
-      </p>
+      {/* Project detail drawer */}
+      <ProjectSheet
+        project={active}
+        open={active !== null}
+        onClose={() => setActiveId(null)}
+        defaultView={defaultView}
+      />
+    </div>
+  );
+}
 
-      {/* detail side sheet */}
-      <Sheet open={!!sel} onOpenChange={(o) => !o && setSelected(null)}>
-        <SheetContent side="right" className="w-full sm:max-w-md">
-          {sel && (
-            <>
-              <SheetHeader className="border-b border-line">
+/* ---- Detail Sheet ----------------------------------------------------- */
+
+function ProjectSheet({
+  project,
+  open,
+  onClose,
+  defaultView,
+}: {
+  project: Project | null;
+  open: boolean;
+  onClose: () => void;
+  defaultView: string;
+}) {
+  return (
+    <Sheet open={open} onOpenChange={(next) => !next && onClose()}>
+      <SheetContent
+        side="right"
+        className="w-full gap-0 border-line bg-paper sm:max-w-[420px]"
+      >
+        {project && (
+          <>
+            <SheetHeader className="border-b border-line p-5">
+              <div className="flex items-center gap-2">
+                <span
+                  className="size-3 shrink-0 rounded-full"
+                  style={{ background: project.color }}
+                />
+                <span className="font-mono text-[11px] font-semibold tracking-wide text-ink-soft">
+                  {project.key}
+                </span>
+              </div>
+              <SheetTitle className="mt-1 font-display text-xl font-extrabold tracking-tight text-ink">
+                {project.name}
+              </SheetTitle>
+              {project.description ? (
+                <SheetDescription className="mt-1 text-[13px] text-ink-soft">
+                  {project.description}
+                </SheetDescription>
+              ) : (
+                <SheetDescription className="sr-only">
+                  Project details
+                </SheetDescription>
+              )}
+              <div className="mt-3">
+                <StatusPill status={project.status} />
+              </div>
+            </SheetHeader>
+
+            <div className="flex flex-col gap-5 overflow-y-auto p-5">
+              <DetailRow label="Lead">
+                <LeadCell leadIds={project.leadIds} />
+              </DetailRow>
+
+              <DetailRow label="Schedule">
+                <span className="inline-flex items-center gap-1.5 text-[13px] font-medium text-ink">
+                  <CalendarRange className="size-3.5 text-ink-soft" />
+                  {scheduleLabel(project)}
+                </span>
+              </DetailRow>
+
+              <DetailRow label="Team">
+                <AvatarStack
+                  ids={projectMemberIds(project.id)}
+                  size={26}
+                  max={6}
+                />
+              </DetailRow>
+
+              <DetailRow label="Progress">
                 <div className="flex items-center gap-3">
-                  <ProjectAvatar seed={sel.name} size={40} rounded="rounded-xl" />
-                  <div className="min-w-0">
-                    <SheetTitle className="truncate font-display text-[18px] font-extrabold tracking-tight text-ink">
-                      {sel.name}
-                    </SheetTitle>
-                    <SheetDescription className="font-mono text-[11px] text-ink-soft">
-                      {sel.key}
-                    </SheetDescription>
-                  </div>
-                </div>
-              </SheetHeader>
-
-              <div className="space-y-5 overflow-y-auto px-4 pb-4">
-                <div className="flex items-center justify-between">
-                  <StatusChip status={sel.status} />
-                  <span className="tnum text-[13px] font-semibold text-ink">
-                    {sel.progress}% complete
+                  <span className="grow">
+                    <ProgressBar
+                      value={project.progress}
+                      color={project.color}
+                    />
+                  </span>
+                  <span className="tnum text-[12.5px] font-semibold text-ink">
+                    {project.progress}%
                   </span>
                 </div>
-                <ProgressBar value={sel.progress} color={sel.color} />
+              </DetailRow>
+            </div>
 
-                {sel.description && (
-                  <p className="text-[13.5px] leading-relaxed text-ink-muted">
-                    {sel.description}
-                  </p>
-                )}
+            <div className="mt-auto border-t border-line p-5">
+              <Link
+                href={projectHref(defaultView, project.id)}
+                className="inline-flex w-full items-center justify-center gap-1.5 rounded-xl bg-ink px-4 py-2.5 text-[13px] font-semibold text-paper shadow-raised transition-opacity hover:opacity-90 focus:outline-none focus-visible:ring-2 focus-visible:ring-signal/40"
+              >
+                Open project
+                <ExternalLink className="size-3.5" />
+              </Link>
+            </div>
+          </>
+        )}
+      </SheetContent>
+    </Sheet>
+  );
+}
 
-                <div className="rounded-xl border border-line bg-paper-raised p-3.5">
-                  <p className="inline-flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wide text-ink-soft">
-                    <CalendarRange className="size-3.5" />
-                    Schedule
-                  </p>
-                  <p className="mt-1.5 text-[13.5px] font-medium text-ink">
-                    {span?.real
-                      ? `${fmtDate(sel.startDate) ?? "—"} → ${fmtDate(sel.endDate) ?? "—"}`
-                      : `${quarterLabel(span!.startQ)} → ${quarterLabel(span!.endQ)}`}
-                  </p>
-                  {!span?.real && (
-                    <p className="mt-1 text-[11.5px] text-ink-soft">
-                      Estimated — set exact dates in the project&apos;s Settings.
-                    </p>
-                  )}
-                </div>
+/* ---- Sub-components --------------------------------------------------- */
 
-                <div>
-                  <p className="mb-2 text-[11px] font-bold uppercase tracking-wide text-ink-soft">
-                    Team
-                  </p>
-                  <div className="flex items-center gap-3">
-                    <AvatarStack ids={memberIds} size={28} max={6} />
-                    <span className="text-[12.5px] text-ink-muted">
-                      {lead ? `Led by ${lead.name}` : `${memberIds.length} members`}
-                    </span>
-                  </div>
-                </div>
-
-                <Link
-                  href={projectHref(defaultView, sel.id)}
-                  className="inline-flex items-center gap-1.5 rounded-xl bg-signal px-4 py-2.5 text-[13px] font-bold text-white transition-colors hover:bg-signal-strong"
-                >
-                  Open project
-                  <ArrowRight className="size-3.5" />
-                </Link>
-              </div>
-            </>
-          )}
-        </SheetContent>
-      </Sheet>
+function PortfolioHeader() {
+  return (
+    <div>
+      <h2 className="font-display text-3xl font-extrabold tracking-tight text-ink lg:text-4xl">
+        Portfolio Roadmap
+      </h2>
+      <p className="mt-1.5 max-w-2xl text-[14px] text-ink-soft">
+        Strategic alignment and execution across every initiative.
+      </p>
     </div>
+  );
+}
+
+function SideStat({ label, value }: { label: string; value: number }) {
+  return (
+    <div className="rounded-xl border border-paper/10 bg-paper/5 px-3.5 py-3">
+      <p className="tnum font-display text-2xl font-extrabold">{value}</p>
+      <p className="mt-0.5 text-[11px] font-medium text-paper/60">{label}</p>
+    </div>
+  );
+}
+
+function DetailRow({
+  label,
+  children,
+}: {
+  label: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="rounded-xl border border-line bg-card px-4 py-3 shadow-card">
+      <p className="text-[10px] font-bold tracking-wide text-ink-soft uppercase">
+        {label}
+      </p>
+      <div className="mt-1.5">{children}</div>
+    </div>
+  );
+}
+
+function LeadCell({ leadIds }: { leadIds: string[] }) {
+  const lead = leadIds[0] ? memberById(leadIds[0]) : undefined;
+  if (!lead) {
+    return <span className="text-[13px] text-ink-soft">Unassigned</span>;
+  }
+  return (
+    <span className="inline-flex items-center gap-2">
+      <MemberAvatar member={lead} size={24} />
+      <span className="truncate text-[13px] font-medium text-ink">
+        {lead.name}
+      </span>
+    </span>
   );
 }

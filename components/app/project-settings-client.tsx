@@ -251,20 +251,22 @@ export function ProjectSettingsClient({ projectId }: { projectId: string }) {
         </header>
 
         <div className="space-y-4 p-5">
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <div>
-              <p className="text-[14px] font-semibold text-ink">
-                Archive project
-              </p>
-              <p className="mt-0.5 text-[12px] text-ink-soft">
-                Hide this project and freeze its tasks. You can restore it later.
-              </p>
+          {canManage && (
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <p className="text-[14px] font-semibold text-ink">
+                  Archive project
+                </p>
+                <p className="mt-0.5 text-[12px] text-ink-soft">
+                  Hide this project and freeze its tasks. You can restore it later.
+                </p>
+              </div>
+              <button className="inline-flex items-center gap-1.5 rounded-xl border border-line bg-card px-4 py-2 text-[13px] font-semibold text-ink transition-colors hover:border-ink/40">
+                <Archive className="size-3.5" />
+                Archive
+              </button>
             </div>
-            <button className="inline-flex items-center gap-1.5 rounded-xl border border-line bg-card px-4 py-2 text-[13px] font-semibold text-ink transition-colors hover:border-ink/40">
-              <Archive className="size-3.5" />
-              Archive
-            </button>
-          </div>
+          )}
 
           {canDelete && (
             <div className="flex flex-wrap items-center justify-between gap-3 border-t border-line pt-4">

@@ -18,7 +18,7 @@ export function LegalShell({
   return (
     <div className="min-h-screen bg-paper">
       <SiteNav />
-      <main className="mx-auto max-w-[760px] px-5 pb-24 pt-28 sm:px-8">
+      <main id="main" tabIndex={-1} className="mx-auto max-w-[760px] px-5 pb-24 pt-28 outline-none sm:px-8">
         <p className="font-mono text-[11px] uppercase tracking-wider text-ink-soft">
           Last updated {updated}
         </p>

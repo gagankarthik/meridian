@@ -7,12 +7,11 @@ import {
   BarChart3,
   ChevronRight,
   LayoutGrid,
+  ListChecks,
   Map,
   PanelLeftClose,
   PanelLeftOpen,
-  PenLine,
   Plus,
-  UserCheck,
   Users,
 } from "lucide-react";
 import { MeridianMark } from "@/components/brand/logo";
@@ -25,8 +24,7 @@ import { cn } from "@/lib/utils";
 const MENU = [
   { label: "Dashboard", href: "/app", icon: LayoutGrid },
   { label: "Roadmap", href: "/app/roadmap", icon: Map },
-  { label: "Assigned to me", href: "/app/assigned", icon: UserCheck },
-  { label: "Created by me", href: "/app/created", icon: PenLine },
+  { label: "My Tasks", href: "/app/my-tasks", icon: ListChecks },
   { label: "Reports", href: "/app/reports", icon: BarChart3 },
   { label: "Team", href: "/app/team", icon: Users },
 ];

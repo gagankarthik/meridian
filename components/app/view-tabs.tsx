@@ -111,19 +111,21 @@ export function ProjectViewHeader({
               )}
             </div>
           )}
-          <Link
-            href={`/app/tasks/new${q}`}
-            className="inline-flex items-center gap-1.5 rounded-xl bg-signal px-3 py-1.5 text-[13px] font-bold text-white transition-colors hover:bg-signal-strong"
-          >
-            <Plus className="size-3.5" />
-            <span className="hidden sm:inline">Add task</span>
-          </Link>
+          {ws.can("create") && (
+            <Link
+              href={`/app/tasks/new${q}`}
+              className="inline-flex items-center gap-1.5 rounded-xl bg-signal px-3 py-1.5 text-[13px] font-bold text-white transition-colors hover:bg-signal-strong"
+            >
+              <Plus className="size-3.5" />
+              <span className="hidden sm:inline">Add task</span>
+            </Link>
+          )}
         </div>
       </div>
 
       {/* tabs + right-aligned project search / filter */}
-      <div className="mt-2 flex items-center gap-3 px-2 sm:px-4">
-        <div className="flex min-w-0 flex-1 items-center gap-0.5 overflow-x-auto [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+      <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 px-2 sm:px-4">
+        <div className="flex min-w-0 flex-1 flex-wrap items-center gap-0.5">
           {TABS.map((t) => {
             const active = t.id === current;
             return (
@@ -349,7 +351,7 @@ function ProjectSearchFilter({ projectId }: { projectId: string }) {
               Status
             </span>
             <div className="mt-2 flex flex-wrap gap-1.5">
-              {ws.columns.map((c) => {
+              {ws.columnsForProject(projectId).map((c) => {
                 const on = statuses.has(c.id);
                 return (
                   <button

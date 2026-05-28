@@ -1,7 +1,7 @@
 "use client";
 
 import type { KeyboardEvent } from "react";
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import Link from "next/link";
 import {
   Check,
@@ -54,9 +54,26 @@ export function TeamClient() {
   // Only owners/admins manage people (invite, change roles, remove). Members
   // and viewers see the team read-only.
   const canManage = ws.can("manage");
-  const [members, setMembers] = useState<Member[]>(ws.members);
-  // Keep the table in sync with live workspace members as they load.
-  useEffect(() => setMembers(ws.members), [ws.members]);
+  // Session-only optimistic invite rows. Real members come straight from
+  // `ws.members` (the single source of truth) so role changes / removals made
+  // via `ws.*` reflect immediately and survive reload — no divergent local copy
+  // that an unrelated workspace update could clobber. Pending invites are kept
+  // separately and merged for display so they aren't wiped by those updates.
+  const [invitedRows, setInvitedRows] = useState<Member[]>([]);
+  const members = useMemo<Member[]>(() => {
+    if (invitedRows.length === 0) return ws.members;
+    // Don't duplicate an invite that has since materialised as a real member.
+    const known = new Set(ws.members.map((m) => m.id));
+    const knownEmails = new Set(
+      ws.members.map((m) => m.email.toLowerCase()),
+    );
+    return [
+      ...ws.members,
+      ...invitedRows.filter(
+        (m) => !known.has(m.id) && !knownEmails.has(m.email.toLowerCase()),
+      ),
+    ];
+  }, [ws.members, invitedRows]);
   const [open, setOpen] = useState(false);
   const [emails, setEmails] = useState<string[]>([]);
   const [emailDraft, setEmailDraft] = useState("");
@@ -159,7 +176,7 @@ export function TeamClient() {
     });
 
     // Optimistically add, then reflect the real result of provisioning.
-    setMembers((m) => [...m, ...created]);
+    setInvitedRows((m) => [...m, ...created]);
     resetInvite();
     setOpen(false);
 
@@ -191,13 +208,15 @@ export function TeamClient() {
   }
 
   function setMemberRole(id: string, r: Role) {
-    setMembers((ms) => ms.map((m) => (m.id === id ? { ...m, role: r } : m)));
+    // Keep any pending-invite row in sync; real members persist through `ws`.
+    setInvitedRows((ms) => ms.map((m) => (m.id === id ? { ...m, role: r } : m)));
     ws.updateMember(id, { role: r }); // persist
     setMenuId(null);
     flash(`Role updated to ${r}`);
   }
   function removeMember(m: Member) {
-    setMembers((ms) => ms.filter((x) => x.id !== m.id));
+    // Drop the matching pending-invite row (if any); real members persist.
+    setInvitedRows((ms) => ms.filter((x) => x.id !== m.id));
     ws.removeMember(m.id); // persist the removal so it sticks on reload
     flash(`Removed ${m.name}`);
   }
@@ -217,7 +236,8 @@ export function TeamClient() {
     if (!accessMember) return;
     const next = Array.from(accessProjects);
     const target = accessMember;
-    setMembers((ms) =>
+    // Keep any pending-invite row in sync; real members persist through `ws`.
+    setInvitedRows((ms) =>
       ms.map((x) => (x.id === target.id ? { ...x, projects: next } : x)),
     );
     ws.updateMember(target.id, { projects: next }); // persist
@@ -423,7 +443,9 @@ export function TeamClient() {
                             ))}
                           </>
                         )}
-                        {m.role !== "Owner" && m.id !== ws.me.id && (
+                        {m.role !== "Owner" &&
+                          m.id !== ws.me.id &&
+                          m.userId !== ws.me.id && (
                           <>
                             <div className="my-1.5 border-t border-line" />
                             <ActionItem

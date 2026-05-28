@@ -26,6 +26,7 @@ import {
   type Notification,
   type Priority,
   type Project,
+  type SubTask,
   type Task,
 } from "@/lib/app-data";
 import { cognitoConfigured } from "@/lib/cognito";
@@ -57,6 +58,8 @@ export type NewTask = {
   due?: string;
   startDate?: string;
   reviewerId?: string;
+  description?: string;
+  subtasks?: SubTask[];
 };
 
 export type NewProject = {
@@ -108,16 +111,30 @@ type WorkspaceCtx = {
   updateProject: (id: string, patch: Partial<Project>) => void;
   deleteProject: (id: string) => void;
   columns: Column[];
+  /** Columns for a project: the shared defaults + that project's custom columns. */
+  columnsForProject: (projectId: string) => Column[];
   collapsed: Set<string>;
   toggleColumn: (id: string) => void;
-  addColumn: (name: string) => void;
-  removeColumn: (id: string) => void;
+  addColumn: (name: string, projectId?: string) => void;
+  removeColumn: (id: string, projectId?: string) => void;
+  renameColumn: (id: string, name: string, projectId: string) => void;
+  reorderColumns: (projectId: string, orderedIds: string[]) => void;
   role: Role;
   setRole: (r: Role) => void;
   can: (action: WsAction) => boolean;
   addTask: (t: NewTask) => Task;
   updateTask: (id: string, patch: Partial<Task>) => void;
   deleteTask: (id: string) => void;
+  /** Upload files to a task: S3 (presigned PUT) then record as attachments. */
+  uploadTaskDocuments: (
+    taskId: string,
+    projectId: string,
+    files: File[],
+  ) => Promise<void>;
+  /** Upload files to a project (no task): S3 (presigned PUT) then record. */
+  uploadProjectDocuments: (projectId: string, files: File[]) => Promise<void>;
+  /** Remove an attachment everywhere (Attachments tab + any task) + S3/DDB. */
+  removeAttachment: (id: string) => void;
   moveTask: (id: string, column: string) => void;
   selectedId: string | null;
   selectedTask: Task | null;
@@ -127,8 +144,20 @@ type WorkspaceCtx = {
 
 const Ctx = createContext<WorkspaceCtx | null>(null);
 
-let seq = 1000;
-const nextId = (p: string) => `${p}-${++seq}`;
+/* Globally-unique optimistic id. A plain incrementing counter resets to its
+   start every session, so — now that the API honors the client-provided id —
+   the first new item each session would collide with (and overwrite) an
+   already-persisted item of the same id (e.g. two `t-1001`). A time+random
+   suffix is unique across sessions and stays within the API's id pattern. */
+const nextId = (p: string) =>
+  `${p}-${Date.now().toString(36)}${Math.random().toString(36).slice(2, 7)}`;
+
+/** Compact human-readable file size. */
+function humanSize(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
 
 /** Two-letter initials from a display name. */
 function initialsFromName(s: string): string {
@@ -285,6 +314,70 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
     if (live) void authedFetch(input, init).catch(() => {});
   };
 
+  /* A project's columns: its own ordered list once customised, else the shared
+     defaults. Mutations materialise the full list onto the project + persist. */
+  const baseColumns = (projectId: string): Column[] => {
+    const proj = projects.find((p) => p.id === projectId);
+    return proj?.columns && proj.columns.length ? proj.columns : columns;
+  };
+  const persistColumns = (projectId: string, next: Column[]) => {
+    setProjects((ps) =>
+      ps.map((p) => (p.id === projectId ? { ...p, columns: next } : p)),
+    );
+    persist(`/api/projects/${projectId}`, {
+      method: "PATCH",
+      body: JSON.stringify({ columns: next }),
+    });
+  };
+
+  /* Shared upload pipeline: presign → PUT to S3 → record the ATTACH# item →
+     prepend to the shared `attachments` state. `taskId` is optional so the same
+     flow backs both task-level and project-level (no task) uploads. Needs a
+     live workspace + S3; in demo mode this is a no-op. */
+  const uploadDocuments = async (
+    projectId: string,
+    files: File[],
+    taskId?: string,
+  ) => {
+    if (!live || files.length === 0) return;
+    for (const file of files) {
+      try {
+        const presign = await authedFetch("/api/attachments", {
+          method: "POST",
+          body: JSON.stringify({
+            filename: file.name,
+            contentType: file.type,
+            ...(taskId ? { taskId } : {}),
+          }),
+        });
+        if (!presign.ok) continue;
+        const { uploadUrl, key: objectKey } = await presign.json();
+        await fetch(uploadUrl, {
+          method: "PUT",
+          headers: { "Content-Type": file.type || "application/octet-stream" },
+          body: file,
+        });
+        const rec = await authedFetch("/api/attachments", {
+          method: "PUT",
+          body: JSON.stringify({
+            key: objectKey,
+            name: file.name,
+            ext: (file.name.split(".").pop() ?? "").toLowerCase(),
+            size: humanSize(file.size),
+            projectId,
+            ...(taskId ? { taskId } : {}),
+          }),
+        });
+        if (rec.ok) {
+          const { attachment } = await rec.json();
+          setAttachments((a) => [attachment, ...a]);
+        }
+      } catch {
+        /* best-effort — skip files that fail to upload */
+      }
+    }
+  };
+
   const value: WorkspaceCtx = {
     loading,
     me,
@@ -375,6 +468,13 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
       });
     },
     addProject: (p) => {
+      // The creator always belongs to their own project: added as a member, and
+      // as the lead when none was explicitly chosen — so they get full access.
+      // Use their real MEMBER id (which may differ from their Cognito sub for
+      // invited users) so the project's team arrays match how members are keyed.
+      const creatorId =
+        members.find((m) => m.id === meId || m.userId === meId)?.id ?? meId;
+      const leadIds = p.leadIds.length ? p.leadIds : [creatorId];
       const project: Project = {
         id: nextId("p"),
         name: p.name.trim() || "Untitled project",
@@ -383,14 +483,22 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
         progress: 0,
         status: "On track",
         open: 0,
-        leadIds: p.leadIds,
+        leadIds,
         reviewerIds: p.reviewerIds,
         memberIds: Array.from(
-          new Set([...p.memberIds, ...p.leadIds, ...p.reviewerIds]),
+          new Set([creatorId, ...p.memberIds, ...leadIds, ...p.reviewerIds]),
         ),
         ...(p.description ? { description: p.description } : {}),
       };
       setProjects((ps) => [...ps, project]);
+      // Reflect the new project in the creator's own access list for this session.
+      setMembers((ms) =>
+        ms.map((m) =>
+          m.id === creatorId
+            ? { ...m, projects: Array.from(new Set([...(m.projects ?? []), project.id])) }
+            : m,
+        ),
+      );
       persist("/api/projects", { method: "POST", body: JSON.stringify(project) });
     },
     updateProject: (id, patch) => {
@@ -410,9 +518,45 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
         else n.add(id);
         return n;
       }),
-    addColumn: (name) =>
-      setColumns((c) => [...c, { id: nextId("col"), name: name.trim() || "New column" }]),
-    removeColumn: (id) => setColumns((c) => c.filter((x) => x.id !== id)),
+    columnsForProject: (projectId) => baseColumns(projectId),
+    addColumn: (name, projectId) => {
+      const col = { id: nextId("col"), name: name.trim() || "New column" };
+      if (!projectId) {
+        setColumns((c) => [...c, col]);
+        return;
+      }
+      persistColumns(projectId, [...baseColumns(projectId), col]);
+    },
+    removeColumn: (id, projectId) => {
+      if (!projectId) {
+        setColumns((c) => c.filter((x) => x.id !== id));
+        return;
+      }
+      persistColumns(
+        projectId,
+        baseColumns(projectId).filter((c) => c.id !== id),
+      );
+    },
+    renameColumn: (id, name, projectId) => {
+      const clean = name.trim();
+      if (!clean) return;
+      persistColumns(
+        projectId,
+        baseColumns(projectId).map((c) =>
+          c.id === id ? { ...c, name: clean } : c,
+        ),
+      );
+    },
+    reorderColumns: (projectId, orderedIds) => {
+      const cols = baseColumns(projectId);
+      const byId = new Map(cols.map((c) => [c.id, c]));
+      const next = orderedIds
+        .map((id) => byId.get(id))
+        .filter((c): c is Column => Boolean(c));
+      // keep any columns not present in the ordered list (safety)
+      for (const c of cols) if (!orderedIds.includes(c.id)) next.push(c);
+      persistColumns(projectId, next);
+    },
     role,
     setRole,
     can,
@@ -431,6 +575,10 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
         due: t.due ?? "—",
         tag: t.tag ?? "Task",
         tagColor: t.tagColor ?? "#2563eb",
+        createdById: meId,
+        description: t.description ?? "",
+        subtasks: t.subtasks ?? [],
+        comments: [],
         ...(t.startDate ? { startDate: t.startDate } : {}),
         ...(t.reviewerId ? { reviewerId: t.reviewerId } : {}),
       };
@@ -461,6 +609,16 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
       setTasks((ts) => ts.filter((x) => x.id !== id));
       setSelectedId((s) => (s === id ? null : s));
       persist(`/api/tasks/${id}`, { method: "DELETE" });
+    },
+    uploadTaskDocuments: (taskId, projectId, files) =>
+      uploadDocuments(projectId, files, taskId),
+    uploadProjectDocuments: (projectId, files) =>
+      uploadDocuments(projectId, files),
+    removeAttachment: (id) => {
+      setAttachments((a) => a.filter((x) => x.id !== id));
+      persist(`/api/attachments?id=${encodeURIComponent(id)}`, {
+        method: "DELETE",
+      });
     },
     moveTask: (id, column) => {
       setTasks((ts) => ts.map((x) => (x.id === id ? { ...x, column } : x)));

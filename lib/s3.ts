@@ -1,6 +1,7 @@
 import "server-only";
 import { S3Client } from "@aws-sdk/client-s3";
 import {
+  DeleteObjectCommand,
   GetObjectCommand,
   PutObjectCommand,
 } from "@aws-sdk/client-s3";
@@ -39,6 +40,12 @@ export async function presignDownload(key: string, expiresIn = 300): Promise<str
     new GetObjectCommand({ Bucket: S3_BUCKET, Key: key }),
     { expiresIn },
   );
+}
+
+/** Delete an object from S3 (best-effort; no-op when S3 isn't configured). */
+export async function deleteObject(key: string): Promise<void> {
+  if (!s3Configured) return;
+  await s3().send(new DeleteObjectCommand({ Bucket: S3_BUCKET, Key: key }));
 }
 
 /** Server-side upload (no browser CORS needed). */

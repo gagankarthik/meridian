@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useRef, useState } from "react";
 import {
   Download,
   FileSpreadsheet,
@@ -13,7 +13,8 @@ import {
   Upload,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
-import { ME_ID, memberById, type Attachment } from "@/lib/app-data";
+import { authedFetch } from "@/lib/api-client";
+import { memberById } from "@/lib/app-data";
 import { Avatar } from "@/components/app/widgets";
 import { useWorkspace } from "@/components/app/workspace";
 
@@ -26,32 +27,16 @@ const EXT: Record<string, { color: string; icon: LucideIcon }> = {
   mp4: { color: "#d9842b", icon: FileVideo },
 };
 
-function formatSize(bytes: number): string {
-  if (bytes >= 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
-  if (bytes >= 1024) return `${Math.round(bytes / 1024)} KB`;
-  return `${bytes} B`;
-}
-
-function splitName(fileName: string): { name: string; ext: string } {
-  const dot = fileName.lastIndexOf(".");
-  if (dot <= 0) return { name: fileName, ext: "" };
-  return {
-    name: fileName.slice(0, dot),
-    ext: fileName.slice(dot + 1).toLowerCase(),
-  };
-}
-
 export function AttachmentsClient({ projectId }: { projectId: string }) {
-  const { attachments } = useWorkspace();
-  const [files, setFiles] = useState<Attachment[]>([]);
+  const ws = useWorkspace();
+  const canCreate = ws.can("create");
+  const canDelete = ws.can("delete");
   const [query, setQuery] = useState("");
   const inputRef = useRef<HTMLInputElement>(null);
 
-  // Live attachments for this project (from bootstrap); local uploads/deletes
-  // layer on top for the session.
-  useEffect(() => {
-    setFiles(attachments.filter((f) => f.projectId === projectId));
-  }, [attachments, projectId]);
+  // Live view over the shared workspace attachments — re-renders whenever an
+  // upload or delete (from here OR a task's Documents) changes `ws.attachments`.
+  const files = ws.attachments.filter((f) => f.projectId === projectId);
 
   function openPicker() {
     inputRef.current?.click();
@@ -59,23 +44,25 @@ export function AttachmentsClient({ projectId }: { projectId: string }) {
 
   function handleFiles(list: FileList | null) {
     if (!list || list.length === 0) return;
-    const added: Attachment[] = Array.from(list).map((file, i) => {
-      const { name, ext } = splitName(file.name);
-      return {
-        id: `f-${Date.now()}-${i}`,
-        name,
-        ext,
-        size: formatSize(file.size),
-        uploadedById: ME_ID,
-        date: "Today",
-        projectId,
-      };
-    });
-    setFiles((prev) => [...added, ...prev]);
+    void ws.uploadProjectDocuments(projectId, Array.from(list));
   }
 
   function handleDelete(id: string) {
-    setFiles((prev) => prev.filter((f) => f.id !== id));
+    ws.removeAttachment(id);
+  }
+
+  async function handleDownload(objectKey?: string) {
+    if (!objectKey) return;
+    try {
+      const res = await authedFetch(
+        `/api/attachments?key=${encodeURIComponent(objectKey)}`,
+      );
+      if (!res.ok) return;
+      const { url } = await res.json();
+      if (url) window.open(url, "_blank", "noopener");
+    } catch {
+      /* ignore */
+    }
   }
 
   const q = query.trim().toLowerCase();
@@ -86,33 +73,37 @@ export function AttachmentsClient({ projectId }: { projectId: string }) {
   return (
     <div className="space-y-6 p-5 sm:p-6 lg:p-8">
       {/* dropzone */}
-      <button
-        type="button"
-        onClick={openPicker}
-        className="flex w-full flex-col items-center justify-center gap-2 rounded-2xl border-2 border-dashed border-line bg-card/60 px-6 py-10 text-center transition-colors hover:border-signal/60 hover:bg-signal-soft/30"
-      >
-        <span className="grid size-12 place-items-center rounded-xl bg-signal-soft text-signal">
-          <Upload className="size-5" />
-        </span>
-        <p className="mt-1 text-[15px] font-bold text-ink">
-          Drag &amp; drop files, or <span className="text-signal">browse</span>
-        </p>
-        <p className="max-w-md text-[12.5px] text-ink-soft">
-          Stored in Amazon S3 with per-project access control. Up to 5 GB per
-          file.
-        </p>
-      </button>
+      {canCreate && (
+        <>
+          <button
+            type="button"
+            onClick={openPicker}
+            className="flex w-full flex-col items-center justify-center gap-2 rounded-2xl border-2 border-dashed border-line bg-card/60 px-6 py-10 text-center transition-colors hover:border-signal/60 hover:bg-signal-soft/30"
+          >
+            <span className="grid size-12 place-items-center rounded-xl bg-signal-soft text-signal">
+              <Upload className="size-5" />
+            </span>
+            <p className="mt-1 text-[15px] font-bold text-ink">
+              Drag &amp; drop files, or <span className="text-signal">browse</span>
+            </p>
+            <p className="max-w-md text-[12.5px] text-ink-soft">
+              Stored in Amazon S3 with per-project access control. Up to 5 GB per
+              file.
+            </p>
+          </button>
 
-      <input
-        ref={inputRef}
-        type="file"
-        multiple
-        hidden
-        onChange={(e) => {
-          handleFiles(e.target.files);
-          e.target.value = "";
-        }}
-      />
+          <input
+            ref={inputRef}
+            type="file"
+            multiple
+            hidden
+            onChange={(e) => {
+              handleFiles(e.target.files);
+              e.target.value = "";
+            }}
+          />
+        </>
+      )}
 
       {/* search */}
       <div className="flex items-center justify-between gap-3">
@@ -174,18 +165,22 @@ export function AttachmentsClient({ projectId }: { projectId: string }) {
                   <button
                     type="button"
                     title="Download"
-                    className="grid size-8 place-items-center rounded-lg text-ink-soft opacity-0 transition-all hover:bg-secondary hover:text-ink group-hover:opacity-100"
+                    disabled={!f.objectKey}
+                    onClick={() => handleDownload(f.objectKey)}
+                    className="grid size-8 place-items-center rounded-lg text-ink-soft opacity-0 transition-all hover:bg-secondary hover:text-ink group-hover:opacity-100 disabled:cursor-not-allowed disabled:opacity-0 group-hover:disabled:opacity-40"
                   >
                     <Download className="size-4" />
                   </button>
-                  <button
-                    type="button"
-                    title="Delete"
-                    onClick={() => handleDelete(f.id)}
-                    className="grid size-8 place-items-center rounded-lg text-ink-soft opacity-0 transition-all hover:bg-red-500/10 hover:text-red-600 group-hover:opacity-100"
-                  >
-                    <Trash2 className="size-4" />
-                  </button>
+                  {canDelete && (
+                    <button
+                      type="button"
+                      title="Delete"
+                      onClick={() => handleDelete(f.id)}
+                      className="grid size-8 place-items-center rounded-lg text-ink-soft opacity-0 transition-all hover:bg-red-500/10 hover:text-red-600 group-hover:opacity-100"
+                    >
+                      <Trash2 className="size-4" />
+                    </button>
+                  )}
                 </div>
               </div>
             );

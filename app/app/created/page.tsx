@@ -1,7 +1,6 @@
-import { MyTasksList } from "@/components/app/my-tasks-list";
+import { redirect } from "next/navigation";
 
-export const metadata = { title: "Created by me" };
-
+// Consolidated into the single "My Tasks" view with tabs.
 export default function CreatedPage() {
-  return <MyTasksList mode="created" />;
+  redirect("/app/my-tasks?view=created");
 }

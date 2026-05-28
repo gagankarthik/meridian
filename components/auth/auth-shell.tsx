@@ -31,7 +31,7 @@ const PANEL_POINTS = [
  */
 export function AuthShell({ children, title, subtitle, wide }: AuthShellProps) {
   return (
-    <main className="relative grid min-h-dvh bg-paper lg:grid-cols-[1fr_1.05fr]">
+    <main id="main" tabIndex={-1} className="relative grid min-h-dvh bg-paper outline-none lg:grid-cols-[1fr_1.05fr]">
       {/* subtle brand wash on mobile/tablet (the brand panel is desktop-only) */}
       <div
         aria-hidden

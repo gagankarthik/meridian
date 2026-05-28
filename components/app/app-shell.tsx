@@ -91,7 +91,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 function MainArea({ children }: { children: React.ReactNode }) {
   const ws = useWorkspace();
   return (
-    <main className="flex-1 overflow-y-auto bg-sunken">
+    <main id="main" tabIndex={-1} className="flex-1 overflow-y-auto bg-sunken outline-none">
       {ws.loading ? <WorkspaceSkeleton /> : children}
     </main>
   );

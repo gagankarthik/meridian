@@ -35,19 +35,28 @@ const ROLE_BADGE: Record<ProjectRole, string> = {
 export function MemberDetail({ id }: { id: string }) {
   const router = useRouter();
   const ws = useWorkspace();
-  const member = memberById(id);
+  // Resolve against the live workspace members so edits (here or elsewhere)
+  // stay reflected. `memberById` resolves by record id OR linked Cognito sub.
+  const member =
+    ws.members.find((m) => m.id === id || m.userId === id) ?? memberById(id);
 
-  // Local project-access state (seeded from the member's projects).
-  // No real backend — this is a demo of admin access management.
-  const [access, setAccess] = useState<Set<string>>(
+  // Project access is derived live from the member's record — granting/revoking
+  // persists through `ws.updateMember`, so it propagates everywhere + survives
+  // reload (no divergent local copy).
+  const access = useMemo(
     () => new Set(member?.projects ?? []),
+    [member?.projects],
   );
   const [toast, setToast] = useState<string | null>(null);
 
-  // Tasks assigned to this member (from the live workspace store).
+  // Tasks assigned to this member (from the live workspace store). Match on the
+  // resolved member record id — the route `id` may be a Cognito sub while tasks
+  // store the member's record id, so filtering on the raw param would miss
+  // their tasks (and skew the Open/Completed/per-project counts derived below).
+  const assigneeId = member?.id ?? id;
   const assigned = useMemo(
-    () => ws.tasks.filter((t) => t.assigneeIds.includes(id)),
-    [ws.tasks, id],
+    () => ws.tasks.filter((t) => t.assigneeIds.includes(assigneeId)),
+    [ws.tasks, assigneeId],
   );
   const openCount = useMemo(
     () => assigned.filter((t) => t.column !== "done").length,
@@ -89,18 +98,19 @@ export function MemberDetail({ id }: { id: string }) {
   }
 
   function toggleAccess(pid: string) {
+    if (!member) return;
     const project = projectById(pid);
-    setAccess((prev) => {
-      const next = new Set(prev);
-      if (next.has(pid)) {
-        next.delete(pid);
-        flash(`Revoked access to ${project?.name ?? "project"}`);
-      } else {
-        next.add(pid);
-        flash(`Granted access to ${project?.name ?? "project"}`);
-      }
-      return next;
-    });
+    const next = new Set(access);
+    if (next.has(pid)) {
+      next.delete(pid);
+      flash(`Revoked access to ${project?.name ?? "project"}`);
+    } else {
+      next.add(pid);
+      flash(`Granted access to ${project?.name ?? "project"}`);
+    }
+    // Persist + propagate: updates the shared member record so the change
+    // sticks on reload and shows in the team list / other views immediately.
+    ws.updateMember(member.id, { projects: Array.from(next) });
   }
 
   // Projects this member belongs to, driven by local access state.

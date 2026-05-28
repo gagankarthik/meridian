@@ -1,25 +1,26 @@
 "use client";
 
+import Link from "next/link";
 import { useMemo, useState } from "react";
-import { motion } from "motion/react";
+import { AnimatePresence, motion } from "motion/react";
 import {
+  ArrowDown,
+  ArrowUp,
   Check,
   ChevronDown,
   ChevronRight,
   Flag,
   GripVertical,
-  ListFilter,
+  MoreHorizontal,
+  Pencil,
   Plus,
-  Search,
-  X,
+  Trash2,
 } from "lucide-react";
 import {
   getTaskDetail,
   priorityMeta,
   subtaskKey,
   taskKey,
-  type Priority,
-  type Task,
 } from "@/lib/app-data";
 import { useWorkspace } from "@/components/app/workspace";
 import { AvatarStack, ProgressBar } from "@/components/app/widgets";
@@ -32,8 +33,6 @@ const GROUP_TINT: Record<string, string> = {
   review: "#2563eb",
   done: "#22a06b",
 };
-
-const PRIORITIES: Priority[] = ["Urgent", "High", "Medium", "Low"];
 
 // Single grid template shared by header / group / task / child rows so that
 // every column lines up like a real spreadsheet. Each non-first cell carries a
@@ -57,43 +56,20 @@ export function TableClient({ projectId }: { projectId: string }) {
   const canEdit = ws.can("edit");
   const canCreate = ws.can("create");
 
-  const [query, setQuery] = useState("");
-  const [filterOpen, setFilterOpen] = useState(false);
-  const [assigneeFilter, setAssigneeFilter] = useState<string | null>(null);
-  const [priorityFilter, setPriorityFilter] = useState<Priority | null>(null);
-
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
-  const [adding, setAdding] = useState<string | null>(null);
-  const [draftTitle, setDraftTitle] = useState("");
   const [dragId, setDragId] = useState<string | null>(null);
   const [dropCol, setDropCol] = useState<string | null>(null);
+  const [menuCol, setMenuCol] = useState<string | null>(null);
+  const [renameCol, setRenameCol] = useState<string | null>(null);
+  const [renameValue, setRenameValue] = useState("");
+  const [removeTarget, setRemoveTarget] = useState<{ id: string; name: string } | null>(null);
+  const canManage = ws.can("manage");
 
   const projectTasks = useMemo(
     () => ws.tasks.filter((t) => t.projectId === projectId),
     [ws.tasks, projectId],
   );
-
-  const q = query.trim().toLowerCase();
-  const matches = (t: Task) =>
-    (!q || t.title.toLowerCase().includes(q)) &&
-    (!assigneeFilter || t.assigneeIds.includes(assigneeFilter)) &&
-    (!priorityFilter || t.priority === priorityFilter);
-
-  const visibleTasks = useMemo(
-    () => projectTasks.filter(matches),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [projectTasks, q, assigneeFilter, priorityFilter],
-  );
-
-  const activeFilters = (assigneeFilter ? 1 : 0) + (priorityFilter ? 1 : 0);
-
-  const assigneesInProject = useMemo(
-    () =>
-      ws.members.filter((m) =>
-        projectTasks.some((t) => t.assigneeIds.includes(m.id)),
-      ),
-    [projectTasks],
-  );
+  const cols = ws.columnsForProject(projectId);
 
   function toggleExpanded(id: string) {
     setExpanded((s) => {
@@ -103,25 +79,35 @@ export function TableClient({ projectId }: { projectId: string }) {
       return n;
     });
   }
-
-  function clearFilters() {
-    setAssigneeFilter(null);
-    setPriorityFilter(null);
+  function startRename(id: string, name: string) {
+    setRenameCol(id);
+    setRenameValue(name);
+    setMenuCol(null);
   }
-
-  function commitAdd(colId: string) {
-    const title = draftTitle.trim();
-    if (title) {
-      ws.addTask({
-        title,
-        column: colId,
-        projectId,
-        tag: "Task",
-        tagColor: "#2563eb",
-      });
+  function submitRename() {
+    if (renameCol) ws.renameColumn(renameCol, renameValue, projectId);
+    setRenameCol(null);
+  }
+  function moveColumn(id: string, dir: -1 | 1) {
+    const ids = cols.map((c) => c.id);
+    const i = ids.indexOf(id);
+    const j = i + dir;
+    if (i < 0 || j < 0 || j >= ids.length) return;
+    [ids[i], ids[j]] = [ids[j], ids[i]];
+    ws.reorderColumns(projectId, ids);
+    setMenuCol(null);
+  }
+  function confirmRemoveColumn() {
+    if (!removeTarget) return;
+    const remaining = cols.filter((c) => c.id !== removeTarget.id);
+    const fallback = remaining[0]?.id;
+    if (fallback) {
+      projectTasks
+        .filter((t) => t.column === removeTarget.id)
+        .forEach((t) => ws.moveTask(t.id, fallback));
     }
-    setDraftTitle("");
-    setAdding(null);
+    ws.removeColumn(removeTarget.id, projectId);
+    setRemoveTarget(null);
   }
 
   function handleDrop(colId: string) {
@@ -135,118 +121,13 @@ export function TableClient({ projectId }: { projectId: string }) {
 
   return (
     <div className="p-4 sm:p-6">
-      {/* top bar: search beside filter */}
-      <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-        <div className="flex flex-1 items-center gap-2">
-          <div className="relative min-w-[200px] max-w-sm flex-1">
-            <Search className="pointer-events-none absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2 text-ink-soft" />
-            <input
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              placeholder="Search tasks…"
-              className="w-full rounded-xl border border-line bg-card py-1.5 pl-8 pr-8 text-[13px] text-ink placeholder:text-ink-soft focus:border-signal focus:outline-none"
-            />
-            {query && (
-              <button
-                onClick={() => setQuery("")}
-                aria-label="Clear search"
-                className="absolute right-2 top-1/2 grid size-4 -translate-y-1/2 place-items-center rounded-full text-ink-soft transition-colors hover:text-ink"
-              >
-                <X className="size-3" />
-              </button>
-            )}
-          </div>
-
-          <div className="relative">
-            <button
-              onClick={() => setFilterOpen((o) => !o)}
-              className={cn(
-                "inline-flex items-center gap-1.5 rounded-xl border px-3 py-1.5 text-[13px] font-semibold transition-colors",
-                activeFilters > 0
-                  ? "border-signal/40 bg-signal-soft text-signal-strong"
-                  : "border-line bg-card text-ink-muted hover:text-ink",
-              )}
-            >
-              <ListFilter className="size-3.5" />
-              Filter
-              {activeFilters > 0 && (
-                <span className="tnum grid size-4 place-items-center rounded-full bg-signal text-[10px] font-bold text-white">
-                  {activeFilters}
-                </span>
-              )}
-            </button>
-
-            {filterOpen && (
-              <>
-                <div
-                  className="fixed inset-0 z-20"
-                  onClick={() => setFilterOpen(false)}
-                />
-                <motion.div
-                  initial={{ opacity: 0, y: -4 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ duration: 0.12 }}
-                  className="absolute right-0 z-30 mt-2 w-64 rounded-xl border border-line bg-card p-3 shadow-raised"
-                >
-                  <div className="mb-2 flex items-center justify-between">
-                    <span className="text-[11px] font-bold uppercase tracking-wide text-ink-soft">
-                      Filters
-                    </span>
-                    {activeFilters > 0 && (
-                      <button
-                        onClick={clearFilters}
-                        className="inline-flex items-center gap-1 text-[11px] font-semibold text-signal hover:text-signal-strong"
-                      >
-                        <X className="size-3" />
-                        Clear
-                      </button>
-                    )}
-                  </div>
-
-                  <label className="mb-1 block text-[11px] font-semibold text-ink-muted">
-                    Assignee
-                  </label>
-                  <select
-                    value={assigneeFilter ?? ""}
-                    onChange={(e) => setAssigneeFilter(e.target.value || null)}
-                    className="mb-3 w-full rounded-lg border border-line bg-paper-raised px-2 py-1.5 text-[12.5px] text-ink focus:border-signal focus:outline-none"
-                  >
-                    <option value="">Anyone</option>
-                    {assigneesInProject.map((m) => (
-                      <option key={m.id} value={m.id}>
-                        {m.name}
-                      </option>
-                    ))}
-                  </select>
-
-                  <label className="mb-1 block text-[11px] font-semibold text-ink-muted">
-                    Priority
-                  </label>
-                  <select
-                    value={priorityFilter ?? ""}
-                    onChange={(e) =>
-                      setPriorityFilter((e.target.value as Priority) || null)
-                    }
-                    className="w-full rounded-lg border border-line bg-paper-raised px-2 py-1.5 text-[12.5px] text-ink focus:border-signal focus:outline-none"
-                  >
-                    <option value="">Any priority</option>
-                    {PRIORITIES.map((p) => (
-                      <option key={p} value={p}>
-                        {p}
-                      </option>
-                    ))}
-                  </select>
-                </motion.div>
-              </>
-            )}
-          </div>
-        </div>
-
+      {/* No in-view filter — search + filter live on the project tab strip. */}
+      <div className="mb-4 flex items-center justify-end">
         <p className="text-[12.5px] text-ink-soft">
           <span className="tnum font-semibold text-ink-muted">
-            {visibleTasks.length}
+            {projectTasks.length}
           </span>{" "}
-          {visibleTasks.length === 1 ? "task" : "tasks"}
+          {projectTasks.length === 1 ? "task" : "tasks"}
         </p>
       </div>
 
@@ -272,8 +153,8 @@ export function TableClient({ projectId }: { projectId: string }) {
             <span>Progress</span>
           </div>
 
-          {ws.columns.map((col) => {
-            const rows = visibleTasks.filter((t) => t.column === col.id);
+          {cols.map((col, idx) => {
+            const rows = projectTasks.filter((t) => t.column === col.id);
             const tint = GROUP_TINT[col.id] ?? "#2563eb";
             const isCollapsed = ws.collapsed.has(col.id);
             const isDropTarget = dropCol === col.id;
@@ -307,38 +188,105 @@ export function TableClient({ projectId }: { projectId: string }) {
                   isDropTarget && draggingElsewhere && "bg-signal-soft/60",
                 )}
               >
-                {/* collapsible group pill header */}
-                <button
-                  onClick={() => ws.toggleColumn(col.id)}
-                  className="flex w-full items-center gap-2 px-4 py-2.5 text-left transition-colors hover:bg-paper-raised"
-                >
-                  {isCollapsed ? (
-                    <ChevronRight className="size-3.5 text-ink-soft" />
-                  ) : (
-                    <ChevronDown className="size-3.5 text-ink-soft" />
-                  )}
-                  <span
-                    className="inline-flex items-center gap-1.5 rounded-md px-2 py-0.5 text-[12px] font-bold"
-                    style={{
-                      color: tint,
-                      background: `color-mix(in srgb, ${tint} 14%, white)`,
-                    }}
+                {/* collapsible group header + 3-dots menu */}
+                <div className="flex w-full items-center gap-2 px-4 py-2.5 transition-colors hover:bg-paper-raised">
+                  <button
+                    type="button"
+                    onClick={() => ws.toggleColumn(col.id)}
+                    aria-label={isCollapsed ? "Expand" : "Collapse"}
+                    className="grid size-5 shrink-0 place-items-center rounded text-ink-soft hover:text-ink"
                   >
-                    <span
-                      className="size-1.5 rounded-full"
-                      style={{ background: tint }}
+                    {isCollapsed ? (
+                      <ChevronRight className="size-3.5" />
+                    ) : (
+                      <ChevronDown className="size-3.5" />
+                    )}
+                  </button>
+                  {renameCol === col.id ? (
+                    <input
+                      autoFocus
+                      value={renameValue}
+                      onChange={(e) => setRenameValue(e.target.value)}
+                      onBlur={submitRename}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") submitRename();
+                        if (e.key === "Escape") setRenameCol(null);
+                      }}
+                      className="rounded-md border border-signal/40 bg-card px-2 py-0.5 text-[12px] font-bold text-ink outline-none"
                     />
-                    {col.name}
-                  </span>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => ws.toggleColumn(col.id)}
+                      className="inline-flex items-center gap-1.5 rounded-md px-2 py-0.5 text-[12px] font-bold"
+                      style={{ color: tint, background: `color-mix(in srgb, ${tint} 14%, white)` }}
+                    >
+                      <span className="size-1.5 rounded-full" style={{ background: tint }} />
+                      {col.name}
+                    </button>
+                  )}
                   <span className="tnum text-[12px] font-semibold text-ink-soft">
                     {rows.length}
                   </span>
                   {isDropTarget && draggingElsewhere && (
-                    <span className="ml-auto text-[11px] font-semibold text-signal">
+                    <span className="text-[11px] font-semibold text-signal">
                       Drop to move here
                     </span>
                   )}
-                </button>
+
+                  {canEdit && (
+                    <div className="relative ml-auto">
+                      <button
+                        type="button"
+                        onClick={() => setMenuCol((c) => (c === col.id ? null : col.id))}
+                        className="grid size-6 place-items-center rounded-md text-ink-soft transition-colors hover:bg-secondary hover:text-ink"
+                        aria-label="Column options"
+                      >
+                        <MoreHorizontal className="size-3.5" />
+                      </button>
+                      {menuCol === col.id && (
+                        <>
+                          <div className="fixed inset-0 z-10" onClick={() => setMenuCol(null)} />
+                          <div className="absolute right-0 top-full z-20 mt-1 w-44 rounded-lg border border-line bg-popover p-1 shadow-float">
+                            <GroupMenuRow icon={Pencil} onClick={() => startRename(col.id, col.name)}>
+                              Rename
+                            </GroupMenuRow>
+                            <Link
+                              href={`/app/tasks/new?project=${projectId}&status=${col.id}`}
+                              onClick={() => setMenuCol(null)}
+                              className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-[12.5px] font-medium text-ink transition-colors hover:bg-secondary"
+                            >
+                              <Plus className="size-3.5 text-ink-soft" />
+                              New task
+                            </Link>
+                            {canManage && (
+                              <>
+                                <GroupMenuRow icon={ArrowUp} disabled={idx === 0} onClick={() => moveColumn(col.id, -1)}>
+                                  Move up
+                                </GroupMenuRow>
+                                <GroupMenuRow icon={ArrowDown} disabled={idx === cols.length - 1} onClick={() => moveColumn(col.id, 1)}>
+                                  Move down
+                                </GroupMenuRow>
+                                <div className="my-1 border-t border-line" />
+                                <GroupMenuRow
+                                  icon={Trash2}
+                                  danger
+                                  disabled={cols.length <= 1}
+                                  onClick={() => {
+                                    setMenuCol(null);
+                                    setRemoveTarget({ id: col.id, name: col.name });
+                                  }}
+                                >
+                                  Remove column
+                                </GroupMenuRow>
+                              </>
+                            )}
+                          </div>
+                        </>
+                      )}
+                    </div>
+                  )}
+                </div>
 
                 {!isCollapsed && (
                   <div className="border-t border-line">
@@ -574,45 +522,16 @@ export function TableClient({ projectId }: { projectId: string }) {
                       </div>
                     )}
 
-                    {/* per-group add task footer */}
-                    {canCreate &&
-                      (adding === col.id ? (
-                        <div className="flex items-center gap-2 px-4 py-2">
-                          <input
-                            autoFocus
-                            value={draftTitle}
-                            onChange={(e) => setDraftTitle(e.target.value)}
-                            onKeyDown={(e) => {
-                              if (e.key === "Enter") commitAdd(col.id);
-                              if (e.key === "Escape") {
-                                setDraftTitle("");
-                                setAdding(null);
-                              }
-                            }}
-                            onBlur={() => commitAdd(col.id)}
-                            placeholder="Task title…"
-                            className="w-full max-w-sm rounded-lg border border-signal bg-card px-2.5 py-1.5 text-[13px] text-ink focus:outline-none"
-                          />
-                          <button
-                            onMouseDown={(e) => e.preventDefault()}
-                            onClick={() => commitAdd(col.id)}
-                            className="rounded-lg bg-signal px-2.5 py-1.5 text-[12px] font-bold text-white transition-colors hover:bg-signal-strong"
-                          >
-                            Add
-                          </button>
-                        </div>
-                      ) : (
-                        <button
-                          onClick={() => {
-                            setDraftTitle("");
-                            setAdding(col.id);
-                          }}
-                          className="flex w-full items-center gap-2 px-4 py-2.5 text-[12.5px] font-medium text-ink-soft transition-colors hover:bg-paper-raised hover:text-ink"
-                        >
-                          <Plus className="size-3.5" />
-                          Add task
-                        </button>
-                      ))}
+                    {/* per-group add task — opens the full form, status fixed */}
+                    {canCreate && (
+                      <Link
+                        href={`/app/tasks/new?project=${projectId}&status=${col.id}`}
+                        className="flex w-full items-center gap-2 px-4 py-2.5 text-[12.5px] font-medium text-ink-soft transition-colors hover:bg-paper-raised hover:text-ink"
+                      >
+                        <Plus className="size-3.5" />
+                        Add task
+                      </Link>
+                    )}
                   </div>
                 )}
               </div>
@@ -620,6 +539,112 @@ export function TableClient({ projectId }: { projectId: string }) {
           })}
         </div>
       </div>
+
+      <ColumnRemoveDialog
+        target={removeTarget}
+        onCancel={() => setRemoveTarget(null)}
+        onConfirm={confirmRemoveColumn}
+      />
     </div>
+  );
+}
+
+/* ---- Column menu row ---- */
+function GroupMenuRow({
+  icon: Icon,
+  children,
+  onClick,
+  danger,
+  disabled,
+}: {
+  icon: typeof Pencil;
+  children: React.ReactNode;
+  onClick: () => void;
+  danger?: boolean;
+  disabled?: boolean;
+}) {
+  return (
+    <button
+      type="button"
+      disabled={disabled}
+      onClick={onClick}
+      className={cn(
+        "flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-[12.5px] font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-40",
+        danger
+          ? "text-red-700 hover:bg-red-500/10 dark:text-red-300"
+          : "text-ink hover:bg-secondary",
+      )}
+    >
+      <Icon className={cn("size-3.5", !danger && "text-ink-soft")} />
+      {children}
+    </button>
+  );
+}
+
+/* ---- Remove-column confirmation dialog ---- */
+function ColumnRemoveDialog({
+  target,
+  onCancel,
+  onConfirm,
+}: {
+  target: { id: string; name: string } | null;
+  onCancel: () => void;
+  onConfirm: () => void;
+}) {
+  return (
+    <AnimatePresence>
+      {target && (
+        <motion.div
+          className="fixed inset-0 z-[120] grid place-items-center p-4"
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+        >
+          <button
+            type="button"
+            aria-label="Close dialog"
+            onClick={onCancel}
+            className="absolute inset-0 cursor-default bg-ink/40 backdrop-blur-sm"
+          />
+          <motion.div
+            role="alertdialog"
+            aria-modal="true"
+            initial={{ opacity: 0, y: 12, scale: 0.97 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: 12, scale: 0.97 }}
+            transition={{ duration: 0.16, ease: [0.16, 1, 0.3, 1] }}
+            className="relative w-full max-w-[400px] rounded-2xl border border-line bg-card p-6 shadow-float"
+          >
+            <div className="grid size-11 place-items-center rounded-xl bg-red-500/10 text-red-600">
+              <Trash2 className="size-5" />
+            </div>
+            <h2 className="mt-4 font-display text-[18px] font-extrabold tracking-tight text-ink">
+              Remove “{target.name}”?
+            </h2>
+            <p className="mt-1.5 text-[13.5px] leading-relaxed text-ink-muted">
+              The column will be removed for this project. Any tasks in it move to
+              the first column — no work is lost.
+            </p>
+            <div className="mt-6 flex justify-end gap-2.5">
+              <button
+                type="button"
+                onClick={onCancel}
+                className="rounded-xl border border-line bg-card px-4 py-2.5 text-[13px] font-semibold text-ink-muted transition-colors hover:border-line-strong hover:text-ink"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                autoFocus
+                onClick={onConfirm}
+                className="rounded-xl bg-red-600 px-4 py-2.5 text-[13px] font-bold text-white transition-colors hover:bg-red-700"
+              >
+                Remove column
+              </button>
+            </div>
+          </motion.div>
+        </motion.div>
+      )}
+    </AnimatePresence>
   );
 }
