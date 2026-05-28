@@ -42,7 +42,7 @@ export function AppTopbar({
         <span className="grid size-11 shrink-0 place-items-center overflow-hidden bg-card text-[15px] font-bold text-ink">
           {workspace.logo ? (
             // eslint-disable-next-line @next/next/no-img-element
-            <img src={workspace.logo} alt="" className="size-full object-cover" />
+            <img src={workspace.logo} alt={`${workspace.name || "Workspace"} logo`} className="size-full object-cover" />
           ) : (
             (workspace.name || "M").slice(0, 1).toUpperCase()
           )}
