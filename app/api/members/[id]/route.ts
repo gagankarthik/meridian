@@ -36,6 +36,7 @@ export async function PATCH(
   } else {
     if (typeof body.name === "string") patch.name = body.name;
     if (typeof body.avatar === "string") patch.avatar = body.avatar;
+    if (typeof body.initials === "string") patch.initials = body.initials;
   }
 
   const next = { ...existing, ...patch };
@@ -54,11 +55,19 @@ export async function DELETE(
     return Response.json({ error: "Forbidden" }, { status: 403 });
   }
   const { id } = await ctx.params;
-  // Don't let an owner delete themselves out of their own workspace.
+  // Don't let anyone delete themselves out of their own workspace.
   if (id === r.ctx.userId) {
     return Response.json(
       { error: "You can't remove yourself" },
       { status: 400 },
+    );
+  }
+  // The workspace Owner can't be removed by anyone (including other admins).
+  const target = await getItem(key.member(r.ctx.workspaceId, id));
+  if (target && String(target.role ?? "").toLowerCase() === "owner") {
+    return Response.json(
+      { error: "The workspace owner can't be removed" },
+      { status: 403 },
     );
   }
   await deleteItem(key.member(r.ctx.workspaceId, id));

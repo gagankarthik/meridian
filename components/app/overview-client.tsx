@@ -26,9 +26,7 @@ import {
   MemberAvatar,
   Panel,
   ProgressBar,
-  ProjectAvatar,
   StatCard,
-  StatusChip,
 } from "@/components/app/widgets";
 import { useWorkspace } from "@/components/app/workspace";
 import { cn } from "@/lib/utils";
@@ -68,7 +66,8 @@ export function OverviewClient({ projectId }: { projectId: string }) {
 
   return (
     <div className="space-y-6 p-5 sm:p-6 lg:p-8">
-      <ProjectHero project={project} taskCount={total} />
+      {/* The project name, status, and description live in the tab header
+          above — no duplicate hero here. */}
 
       {/* KPI tiles */}
       <motion.div
@@ -123,104 +122,6 @@ export function OverviewClient({ projectId }: { projectId: string }) {
         </div>
       </div>
     </div>
-  );
-}
-
-/* ------------------------------ project hero ------------------------------ */
-
-function ProjectHero({
-  project,
-  taskCount,
-}: {
-  project: Project;
-  taskCount: number;
-}) {
-  const r = 46;
-  const c = 2 * Math.PI * r;
-  const dash = (project.progress / 100) * c;
-
-  return (
-    <motion.section
-      className="relative overflow-hidden rounded-2xl border border-line bg-card p-6 shadow-card sm:p-8"
-      initial={{ opacity: 0, y: 12 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.55, ease }}
-    >
-      {/* tinted glow */}
-      <div
-        className="pointer-events-none absolute -top-24 -right-16 size-72 rounded-full opacity-[0.12] blur-3xl"
-        style={{ background: project.color }}
-      />
-
-      <div className="relative flex flex-wrap items-center justify-between gap-6">
-        <div className="flex min-w-0 items-center gap-4">
-          <ProjectAvatar
-            seed={project.name}
-            size={56}
-            rounded="rounded-2xl"
-            className="shadow-raised"
-          />
-          <div className="min-w-0">
-            <div className="flex flex-wrap items-center gap-2.5">
-              <h1 className="font-display text-2xl font-extrabold tracking-tight text-ink">
-                {project.name}
-              </h1>
-              <StatusChip status={project.status} />
-            </div>
-            <p className="mt-1 font-mono text-[12px] tracking-wide text-ink-soft">
-              {project.key} · {taskCount} tasks tracked
-            </p>
-          </div>
-        </div>
-
-        {/* progress ring */}
-        <div className="relative size-[120px] shrink-0">
-          <svg viewBox="0 0 120 120" className="size-[120px] -rotate-90">
-            <circle
-              cx="60"
-              cy="60"
-              r={r}
-              fill="none"
-              stroke="var(--secondary)"
-              strokeWidth="11"
-            />
-            <motion.circle
-              cx="60"
-              cy="60"
-              r={r}
-              fill="none"
-              stroke={project.color}
-              strokeWidth="11"
-              strokeLinecap="round"
-              strokeDasharray={`${dash} ${c - dash}`}
-              initial={{ strokeDashoffset: c }}
-              animate={{ strokeDashoffset: 0 }}
-              transition={{ duration: 1.1, ease, delay: 0.2 }}
-            />
-          </svg>
-          <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center">
-            <motion.span
-              className="tnum font-display text-[1.7rem] leading-none font-extrabold tracking-tight text-ink"
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              transition={{ duration: 0.5, delay: 0.5 }}
-            >
-              {project.progress}%
-            </motion.span>
-            <span className="mt-1 font-mono text-[10px] tracking-wider uppercase text-ink-soft">
-              Complete
-            </span>
-          </div>
-        </div>
-      </div>
-
-      {/* description — full width, below the title & progress */}
-      {project.description && (
-        <p className="relative mt-5 max-w-3xl border-t border-line pt-4 text-[14px] leading-relaxed text-ink-muted">
-          {project.description}
-        </p>
-      )}
-    </motion.section>
   );
 }
 

@@ -21,11 +21,9 @@ export default function ProfilePage() {
   };
   const [name, setName] = useState(me.name);
   const [email, setEmail] = useState(me.email);
-  const [title, setTitle] = useState("VP, Program Management");
+  const [title, setTitle] = useState("");
   const [tz, setTz] = useState("America/New_York");
-  const [bio, setBio] = useState(
-    "Leading delivery across the Meridian portfolio. Coffee, roadmaps, and shipping on time.",
-  );
+  const [bio, setBio] = useState("");
   // Existing saved photo (if any) shows until a new one is picked.
   const [photo, setPhoto] = useState<string | null>(record?.avatar ?? null);
   const fileRef = useRef<HTMLInputElement>(null);
@@ -90,17 +88,19 @@ export default function ProfilePage() {
               </button>
             </div>
             <div>
-              <p className="font-display text-xl font-bold text-ink">{name}</p>
+              <p className="font-display text-xl font-bold text-ink">
+                {name || "Your name"}
+              </p>
               <p className="text-[13px] text-ink-soft">
-                {title} · {me.role}
+                {title ? `${title} · ${me.role}` : me.role}
               </p>
             </div>
           </div>
 
           <div className="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-2">
-            <Field label="Full name" value={name} onChange={setName} />
-            <Field label="Email" value={email} onChange={setEmail} type="email" />
-            <Field label="Job title" value={title} onChange={setTitle} />
+            <Field label="Full name" value={name} onChange={setName} placeholder="e.g. Avery Quinn" />
+            <Field label="Email" value={email} onChange={setEmail} type="email" placeholder="you@company.com" />
+            <Field label="Job title" value={title} onChange={setTitle} placeholder="e.g. Product Manager" />
             <div>
               <label className="mb-1.5 block text-[12px] font-semibold text-ink-soft">
                 Timezone
@@ -127,7 +127,8 @@ export default function ProfilePage() {
               value={bio}
               onChange={(e) => setBio(e.target.value)}
               rows={3}
-              className="w-full resize-none rounded-xl border border-line bg-paper-raised px-3 py-2.5 text-[14px] leading-relaxed text-ink outline-none focus:border-signal/40"
+              placeholder="A short bio — what you work on and how you like to collaborate."
+              className="w-full resize-none rounded-xl border border-line bg-paper-raised px-3 py-2.5 text-[14px] leading-relaxed text-ink outline-none placeholder:text-ink-soft focus:border-signal/40"
             />
           </div>
 
@@ -155,11 +156,13 @@ function Field({
   value,
   onChange,
   type = "text",
+  placeholder,
 }: {
   label: string;
   value: string;
   onChange: (v: string) => void;
   type?: string;
+  placeholder?: string;
 }) {
   return (
     <div>
@@ -169,8 +172,9 @@ function Field({
       <input
         type={type}
         value={value}
+        placeholder={placeholder}
         onChange={(e) => onChange(e.target.value)}
-        className="w-full rounded-xl border border-line bg-paper-raised px-3 py-2.5 text-[14px] text-ink outline-none focus:border-signal/40"
+        className="w-full rounded-xl border border-line bg-paper-raised px-3 py-2.5 text-[14px] text-ink outline-none placeholder:text-ink-soft focus:border-signal/40"
       />
     </div>
   );

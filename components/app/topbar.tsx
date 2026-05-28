@@ -169,9 +169,10 @@ function SearchBar() {
 /* -------------------------- Notifications -------------------------- */
 function Notifications() {
   const [open, setOpen] = useState(false);
-  const { notifications, members, markNotificationRead, markAllNotificationsRead } =
+  const { notifications, activity, members, markNotificationRead, markAllNotificationsRead } =
     useWorkspace();
   const unread = notifications.filter((n) => n.unread).length;
+  const recentActivity = activity.slice(0, 12);
 
   return (
     <div className="relative">
@@ -208,7 +209,7 @@ function Notifications() {
               )}
             </div>
             <div className="max-h-96 divide-y divide-line overflow-y-auto">
-              {notifications.length === 0 && (
+              {notifications.length === 0 && recentActivity.length === 0 && (
                 <p className="px-4 py-8 text-center text-[13px] text-ink-soft">
                   You&apos;re all caught up.
                 </p>
@@ -244,6 +245,42 @@ function Notifications() {
                   </button>
                 );
               })}
+
+              {/* Recent activity across all projects */}
+              {recentActivity.length > 0 && (
+                <>
+                  <p className="border-t border-line bg-paper-raised px-4 py-2 text-[10px] font-bold uppercase tracking-wide text-ink-soft">
+                    Recent activity
+                  </p>
+                  {recentActivity.map((a) => {
+                    const m = members.find((mem) => mem.name === a.who);
+                    return (
+                      <div
+                        key={a.id}
+                        className="flex gap-3 px-4 py-3 transition-colors hover:bg-paper-raised"
+                      >
+                        <Avatar
+                          initials={a.initials}
+                          hue={m?.hue ?? "#2563eb"}
+                          seed={m?.initials ?? a.initials}
+                          src={m?.avatar}
+                          size={30}
+                        />
+                        <div className="min-w-0 flex-1">
+                          <p className="text-[13px] leading-snug text-ink">
+                            <span className="font-semibold">{a.who}</span>{" "}
+                            {a.action}{" "}
+                            <span className="text-ink">{a.target}</span>
+                          </p>
+                          <span className="text-[11px] text-ink-soft">
+                            {a.time} ago
+                          </span>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </>
+              )}
             </div>
           </div>
         </>

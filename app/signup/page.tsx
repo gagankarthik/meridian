@@ -11,6 +11,7 @@ import {
 } from "aws-amplify/auth";
 import { ArrowRight, Eye, EyeOff, Lock, Mail, ShieldCheck, User } from "lucide-react";
 import { AuthShell } from "@/components/auth/auth-shell";
+import { AuthChecking, useRedirectIfAuthed } from "@/components/auth/auth-redirect";
 import { authErrorMessage, cognitoConfigured } from "@/lib/cognito";
 import { cn } from "@/lib/utils";
 
@@ -34,6 +35,7 @@ function scorePassword(value: string): number {
 
 export default function SignupPage() {
   const router = useRouter();
+  const checkingAuth = useRedirectIfAuthed();
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -110,6 +112,8 @@ export default function SignupPage() {
       setError(authErrorMessage(err, "Couldn't resend the code."));
     }
   }
+
+  if (checkingAuth) return <AuthChecking />;
 
   if (step === "verify") {
     return (

@@ -5,9 +5,11 @@ import Link from "next/link";
 import { resetPassword } from "aws-amplify/auth";
 import { ArrowLeft, ArrowRight, Mail, MailCheck } from "lucide-react";
 import { AuthShell } from "@/components/auth/auth-shell";
+import { AuthChecking, useRedirectIfAuthed } from "@/components/auth/auth-redirect";
 import { authErrorMessage, cognitoConfigured } from "@/lib/cognito";
 
 export default function ForgotPasswordPage() {
+  const checkingAuth = useRedirectIfAuthed();
   const [email, setEmail] = useState("");
   const [sent, setSent] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -30,6 +32,8 @@ export default function ForgotPasswordPage() {
       );
     }
   }
+
+  if (checkingAuth) return <AuthChecking />;
 
   if (sent) {
     return (

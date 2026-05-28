@@ -406,28 +406,37 @@ export function TeamClient() {
                             openAccessDialog(m);
                           }}
                         />
-                        <div className="my-1.5 border-t border-line" />
-                        <p className="px-3 pb-1 pt-0.5 text-[10px] font-bold uppercase tracking-wide text-ink-soft">
-                          Change role
-                        </p>
-                        {ROLES.filter((r) => r !== m.role).map((r) => (
-                          <ActionItem
-                            key={r}
-                            icon={ShieldCheck}
-                            label={`Make ${r}`}
-                            onClick={() => setMemberRole(m.id, r)}
-                          />
-                        ))}
-                        <div className="my-1.5 border-t border-line" />
-                        <ActionItem
-                          icon={Trash2}
-                          label="Remove from team"
-                          danger
-                          onClick={() => {
-                            setMenuId(null);
-                            setRemoveMemberTarget(m);
-                          }}
-                        />
+                        {/* The workspace Owner can't be demoted or removed. */}
+                        {m.role !== "Owner" && (
+                          <>
+                            <div className="my-1.5 border-t border-line" />
+                            <p className="px-3 pb-1 pt-0.5 text-[10px] font-bold uppercase tracking-wide text-ink-soft">
+                              Change role
+                            </p>
+                            {ROLES.filter((r) => r !== m.role).map((r) => (
+                              <ActionItem
+                                key={r}
+                                icon={ShieldCheck}
+                                label={`Make ${r}`}
+                                onClick={() => setMemberRole(m.id, r)}
+                              />
+                            ))}
+                          </>
+                        )}
+                        {m.role !== "Owner" && m.id !== ws.me.id && (
+                          <>
+                            <div className="my-1.5 border-t border-line" />
+                            <ActionItem
+                              icon={Trash2}
+                              label="Remove from team"
+                              danger
+                              onClick={() => {
+                                setMenuId(null);
+                                setRemoveMemberTarget(m);
+                              }}
+                            />
+                          </>
+                        )}
                       </div>
                     </>
                   )}

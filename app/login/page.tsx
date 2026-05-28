@@ -6,11 +6,13 @@ import { useRouter } from "next/navigation";
 import { signIn } from "aws-amplify/auth";
 import { ArrowRight, Eye, EyeOff, Lock, Mail } from "lucide-react";
 import { AuthShell } from "@/components/auth/auth-shell";
+import { AuthChecking, useRedirectIfAuthed } from "@/components/auth/auth-redirect";
 import { authErrorMessage, cognitoConfigured } from "@/lib/cognito";
 import { cn } from "@/lib/utils";
 
 export default function LoginPage() {
   const router = useRouter();
+  const checkingAuth = useRedirectIfAuthed();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
@@ -48,6 +50,8 @@ export default function LoginPage() {
       setSubmitting(false);
     }
   }
+
+  if (checkingAuth) return <AuthChecking />;
 
   return (
     <AuthShell

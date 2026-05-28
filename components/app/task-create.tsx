@@ -23,7 +23,22 @@ export function TaskCreate() {
 
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
-  const [projectId, setProjectId] = useState(() => ws.projects[0]?.id ?? "");
+  const [projectId, setProjectId] = useState("");
+  // When opened from a project page (?project=…), the project is fixed.
+  const [lockedProject, setLockedProject] = useState(false);
+  useEffect(() => {
+    const param = new URLSearchParams(window.location.search).get("project");
+    if (param) {
+      setProjectId(param);
+      setLockedProject(true);
+    }
+  }, []);
+  // Otherwise default to the first project the user can access, once loaded.
+  useEffect(() => {
+    if (!lockedProject && !projectId && ws.projects[0]) {
+      setProjectId(ws.projects[0].id);
+    }
+  }, [ws.projects, lockedProject, projectId]);
   const [column, setColumn] = useState(() => {
     const todo = ws.columns.find((c) => c.id === "todo");
     return todo?.id ?? ws.columns[0]?.id ?? "";
@@ -138,36 +153,49 @@ export function TaskCreate() {
           {/* Project + Status */}
           <div className="grid gap-5 sm:grid-cols-2">
             <Field label="Project">
-              <Dropdown
-                trigger={
-                  <span className="flex items-center gap-2 text-[13.5px] font-medium text-ink">
-                    <span
-                      className="size-2.5 shrink-0 rounded-[3px]"
-                      style={{ background: project?.color ?? "#2563eb" }}
-                    />
-                    {project?.name ?? "Select project"}
+              {lockedProject ? (
+                <div className="flex min-h-[42px] w-full items-center gap-2 rounded-xl border border-line bg-secondary/60 px-3.5 py-2 text-[13.5px] font-medium text-ink">
+                  <span
+                    className="size-2.5 shrink-0 rounded-[3px]"
+                    style={{ background: project?.color ?? "#2563eb" }}
+                  />
+                  {project?.name ?? "This project"}
+                  <span className="ml-auto font-mono text-[10px] uppercase tracking-wide text-ink-soft">
+                    Fixed
                   </span>
-                }
-              >
-                {(close) =>
-                  ws.projects.map((p) => (
-                    <MenuItem
-                      key={p.id}
-                      active={p.id === projectId}
-                      onClick={() => {
-                        setProjectId(p.id);
-                        close();
-                      }}
-                    >
+                </div>
+              ) : (
+                <Dropdown
+                  trigger={
+                    <span className="flex items-center gap-2 text-[13.5px] font-medium text-ink">
                       <span
                         className="size-2.5 shrink-0 rounded-[3px]"
-                        style={{ background: p.color }}
+                        style={{ background: project?.color ?? "#2563eb" }}
                       />
-                      {p.name}
-                    </MenuItem>
-                  ))
-                }
-              </Dropdown>
+                      {project?.name ?? "Select project"}
+                    </span>
+                  }
+                >
+                  {(close) =>
+                    ws.projects.map((p) => (
+                      <MenuItem
+                        key={p.id}
+                        active={p.id === projectId}
+                        onClick={() => {
+                          setProjectId(p.id);
+                          close();
+                        }}
+                      >
+                        <span
+                          className="size-2.5 shrink-0 rounded-[3px]"
+                          style={{ background: p.color }}
+                        />
+                        {p.name}
+                      </MenuItem>
+                    ))
+                  }
+                </Dropdown>
+              )}
             </Field>
 
             <Field label="Status">

@@ -130,6 +130,14 @@ const Ctx = createContext<WorkspaceCtx | null>(null);
 let seq = 1000;
 const nextId = (p: string) => `${p}-${++seq}`;
 
+/** Two-letter initials from a display name. */
+function initialsFromName(s: string): string {
+  const p = s.trim().split(/\s+/);
+  return ((p[0]?.[0] ?? "") + (p[1]?.[0] ?? p[0]?.[1] ?? ""))
+    .toUpperCase()
+    .slice(0, 2);
+}
+
 export function WorkspaceProvider({ children }: { children: ReactNode }) {
   const router = useRouter();
   const [tasks, setTasks] = useState<Task[]>(TASKS);
@@ -193,7 +201,37 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
         );
         setTasks(data.tasks ?? []);
         setProjects(data.projects ?? []);
-        setMembers(data.members ?? []);
+
+        // Self-heal name consistency: the signed-in user's account name (from
+        // their token) is the source of truth. If their member record carries
+        // a stale name (e.g. the email-derived one from an invite), reconcile
+        // it so the same name + avatar show everywhere, and persist the fix.
+        const meId: string | undefined = data.me?.id;
+        const meName: string =
+          (data.me?.name && String(data.me.name).trim()) || data.me?.email || "";
+        let membersData: Member[] = data.members ?? [];
+        let staleSelf: Member | null = null;
+        if (meId && meName) {
+          membersData = membersData.map((m) => {
+            const mid = m.id === meId || (m as { userId?: string }).userId === meId;
+            if (mid && m.name !== meName) {
+              staleSelf = m;
+              return { ...m, name: meName, initials: initialsFromName(meName) };
+            }
+            return m;
+          });
+        }
+        setMembers(membersData);
+        if (staleSelf) {
+          void authedFetch(`/api/members/${(staleSelf as Member).id}`, {
+            method: "PATCH",
+            body: JSON.stringify({
+              name: meName,
+              initials: initialsFromName(meName),
+            }),
+          }).catch(() => {});
+        }
+
         setActivity(data.activity ?? []);
         setNotifications(data.notifications ?? []);
         setApprovals(data.approvals ?? []);
