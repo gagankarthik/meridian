@@ -15,11 +15,12 @@ import {
 import {
   COLUMN_LABEL,
   memberById,
+  priorityMeta,
   projectById,
   projectMemberIds,
   taskKey,
 } from "@/lib/app-data";
-import type { Project, Task } from "@/lib/app-data";
+import type { Priority, Project, Task } from "@/lib/app-data";
 import {
   Avatar,
   AvatarStack,
@@ -121,12 +122,143 @@ export function DashboardCharts() {
       {/* productivity (2/3) + all projects (1/3) */}
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
         <ProductivityOverview tasks={tasks} now={now} />
-        <ProjectsPanel projects={projects} />
+        <ProjectsPanel projects={projects} tasks={tasks} />
+      </div>
+
+      {/* live distribution: status + priority (both derive from ws.tasks) */}
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+        <StatusBreakdown tasks={tasks} />
+        <PriorityBreakdown tasks={tasks} />
       </div>
 
       {/* recent tasks */}
       <RecentTasks tasks={recent} />
     </div>
+  );
+}
+
+/* ----------------------- status / priority breakdown ---------------------- */
+const STATUS_ORDER = ["backlog", "todo", "in_progress", "review", "done"];
+const PRIORITY_ORDER: Priority[] = ["Urgent", "High", "Medium", "Low"];
+
+function BreakdownRow({
+  label,
+  count,
+  total,
+  color,
+  delay,
+}: {
+  label: string;
+  count: number;
+  total: number;
+  color: string;
+  delay: number;
+}) {
+  const pct = total ? Math.round((count / total) * 100) : 0;
+  return (
+    <div className="flex items-center gap-3">
+      <span className="flex w-24 shrink-0 items-center gap-1.5 text-[12.5px] font-medium text-ink-muted">
+        <span className="size-2 shrink-0 rounded-full" style={{ background: color }} />
+        <span className="truncate">{label}</span>
+      </span>
+      <div className="h-2.5 flex-1 overflow-hidden rounded-full bg-secondary">
+        <motion.div
+          className="h-full rounded-full"
+          style={{ background: color }}
+          initial={{ width: 0 }}
+          animate={{ width: `${pct}%` }}
+          transition={{ duration: 0.6, ease, delay }}
+        />
+      </div>
+      <span className="tnum w-6 shrink-0 text-right font-mono text-[12px] font-semibold text-ink">
+        {count}
+      </span>
+    </div>
+  );
+}
+
+function BreakdownCard({
+  title,
+  total,
+  children,
+}: {
+  title: string;
+  total: number;
+  children: React.ReactNode;
+}) {
+  return (
+    <motion.section
+      className="rounded-2xl border border-line bg-card p-5 shadow-card"
+      initial={{ opacity: 0, y: 16 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.5, ease, delay: 0.4 }}
+    >
+      <div className="mb-4 flex items-center justify-between">
+        <h2 className="text-[15px] font-bold tracking-tight text-ink">{title}</h2>
+        <span className="tnum font-mono text-[11px] uppercase tracking-wider text-ink-soft">
+          {total} total
+        </span>
+      </div>
+      {total === 0 ? (
+        <p className="py-6 text-center text-[13px] text-ink-soft">No tasks yet.</p>
+      ) : (
+        <div className="space-y-3">{children}</div>
+      )}
+    </motion.section>
+  );
+}
+
+function StatusBreakdown({ tasks }: { tasks: Task[] }) {
+  const data = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const t of tasks) counts.set(t.column, (counts.get(t.column) ?? 0) + 1);
+    // Known statuses first (in workflow order), then any custom columns.
+    const seen = new Set(STATUS_ORDER);
+    const extra = [...counts.keys()].filter((c) => !seen.has(c));
+    return [...STATUS_ORDER, ...extra].map((col) => ({
+      col,
+      count: counts.get(col) ?? 0,
+    }));
+  }, [tasks]);
+
+  return (
+    <BreakdownCard title="Tasks by status" total={tasks.length}>
+      {data.map((d, i) => (
+        <BreakdownRow
+          key={d.col}
+          label={COLUMN_LABEL[d.col] ?? d.col}
+          count={d.count}
+          total={tasks.length}
+          color={(STATUS_META[d.col] ?? STATUS_META.todo).color}
+          delay={0.45 + i * 0.05}
+        />
+      ))}
+    </BreakdownCard>
+  );
+}
+
+function PriorityBreakdown({ tasks }: { tasks: Task[] }) {
+  const data = useMemo(
+    () =>
+      PRIORITY_ORDER.map((p) => ({
+        p,
+        count: tasks.filter((t) => t.priority === p).length,
+      })),
+    [tasks],
+  );
+  return (
+    <BreakdownCard title="Tasks by priority" total={tasks.length}>
+      {data.map((d, i) => (
+        <BreakdownRow
+          key={d.p}
+          label={d.p}
+          count={d.count}
+          total={tasks.length}
+          color={priorityMeta[d.p].color}
+          delay={0.45 + i * 0.05}
+        />
+      ))}
+    </BreakdownCard>
   );
 }
 
@@ -547,7 +679,13 @@ function ProductivityOverview({ tasks, now }: { tasks: Task[]; now: number }) {
 }
 
 /* ------------------------------ projects panel ---------------------------- */
-function ProjectsPanel({ projects }: { projects: Project[] }) {
+function ProjectsPanel({
+  projects,
+  tasks,
+}: {
+  projects: Project[];
+  tasks: Task[];
+}) {
   const defaultView = useDefaultProjectView();
   return (
     <motion.section
@@ -571,7 +709,16 @@ function ProjectsPanel({ projects }: { projects: Project[] }) {
         </p>
       ) : (
         <div className="max-h-[26rem] divide-y divide-line overflow-y-auto">
-          {projects.map((p) => (
+          {projects.map((p) => {
+            // Derive progress + open count from live tasks so the panel reflects
+            // task changes immediately (the stored p.progress/p.open are seed
+            // values that don't recompute as work moves).
+            const ptasks = tasks.filter((t) => t.projectId === p.id);
+            const open = ptasks.filter((t) => t.column !== "done").length;
+            const progress = ptasks.length
+              ? Math.round(((ptasks.length - open) / ptasks.length) * 100)
+              : 0;
+            return (
             <Link
               key={p.id}
               href={projectHref(defaultView, p.id)}
@@ -587,19 +734,20 @@ function ProjectsPanel({ projects }: { projects: Project[] }) {
                     <StatusChip status={p.status} />
                   </div>
                   <p className="truncate text-[11px] text-ink-soft">
-                    {p.description?.trim() || `${p.key} · ${p.open} open`}
+                    {p.description?.trim() || `${p.key} · ${open} open`}
                   </p>
                 </div>
                 <AvatarStack ids={projectMemberIds(p.id)} size={22} max={3} />
               </div>
               <div className="mt-2.5 flex items-center gap-2.5">
-                <ProgressBar value={p.progress} color={p.color} />
+                <ProgressBar value={progress} color={p.color} />
                 <span className="tnum w-9 shrink-0 text-right font-mono text-[11px] text-ink-soft">
-                  {p.progress}%
+                  {progress}%
                 </span>
               </div>
             </Link>
-          ))}
+            );
+          })}
         </div>
       )}
     </motion.section>

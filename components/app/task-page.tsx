@@ -35,6 +35,8 @@ import {
   relativeTime,
   subtaskKey,
   taskKey,
+  ticketTypeOf,
+  TICKET_TYPES,
   type Comment,
   type Member,
   type Priority,
@@ -43,6 +45,7 @@ import {
 } from "@/lib/app-data";
 import { useWorkspace } from "@/components/app/workspace";
 import { AvatarStack, MemberAvatar, ProgressBar } from "@/components/app/widgets";
+import { TicketTypeBadge, TicketTypeIcon } from "@/components/app/ticket-type";
 import { cn } from "@/lib/utils";
 
 const PRIORITIES: Priority[] = ["Low", "Medium", "High", "Urgent"];
@@ -122,6 +125,7 @@ function TaskBody({ task }: { task: Task }) {
   const reviewer = memberById(reviewerId);
   const project = projectById(task.projectId);
   const pr = priorityMeta[task.priority];
+  const tt = ticketTypeOf(task);
   // Strictly project-confined: ONLY members on this project's team can be an
   // assignee or reviewer — never anyone outside it. A project is a confined space.
   const eligibleMembers = eligibleMembersFor(task.projectId, ws.projects, ws.members);
@@ -244,6 +248,36 @@ function TaskBody({ task }: { task: Task }) {
         <div className="mb-5 rounded-2xl border border-line bg-card p-5 shadow-card">
           <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
             <div className="flex flex-wrap items-center gap-2">
+              {/* Ticket type (editable pill) */}
+              {canEdit ? (
+                <Dropdown
+                  trigger={
+                    <>
+                      <TicketTypeIcon type={tt} />
+                      <span>{tt}</span>
+                    </>
+                  }
+                >
+                  {(close) =>
+                    TICKET_TYPES.map((opt) => (
+                      <MenuItem
+                        key={opt}
+                        active={opt === tt}
+                        onClick={() => {
+                          ws.updateTask(task.id, { ticketType: opt });
+                          close();
+                        }}
+                      >
+                        <TicketTypeIcon type={opt} />
+                        <span className="flex-1 truncate">{opt}</span>
+                      </MenuItem>
+                    ))
+                  }
+                </Dropdown>
+              ) : (
+                <TicketTypeBadge type={tt} />
+              )}
+
               {/* Status (editable pill) */}
               {canEdit ? (
                 <Dropdown
@@ -461,7 +495,7 @@ function TaskBody({ task }: { task: Task }) {
                         type="button"
                         onClick={() => removeSub(s.id)}
                         aria-label="Delete sub-task"
-                        className="grid size-6 shrink-0 place-items-center rounded-md text-ink-soft opacity-0 transition-all group-hover:opacity-100 hover:bg-secondary hover:text-red-600"
+                        className="grid size-6 shrink-0 place-items-center rounded-md text-ink-soft opacity-100 transition-all hover:bg-secondary hover:text-red-600 sm:opacity-0 sm:group-hover:opacity-100"
                       >
                         <X className="size-3.5" />
                       </button>

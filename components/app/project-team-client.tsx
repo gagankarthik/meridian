@@ -282,8 +282,39 @@ export function ProjectTeamClient({ projectId }: { projectId: string }) {
         }),
       });
       const data = await res.json().catch(() => null);
-      const results: { ok: boolean; error?: string }[] = data?.results ?? [];
+      const results: {
+        email?: string;
+        ok: boolean;
+        error?: string;
+        memberId?: string;
+      }[] = data?.results ?? [];
       const failed = results.filter((r) => !r.ok);
+
+      // Promote successful invites into the global workspace store so they
+      // appear on the Team page / assignee pickers / this list with their real
+      // member id straight away — not only after a reload. Falls back to the
+      // optimistic id in demo mode (no server id returned).
+      const realMembers = created
+        .map((iv) => {
+          const r = results.find(
+            (x) => x.email?.toLowerCase() === iv.member.email.toLowerCase(),
+          );
+          if (r && !r.ok) return null;
+          return { ...iv.member, id: r?.memberId ?? iv.member.id };
+        })
+        .filter((m): m is Member => m !== null);
+      if (realMembers.length) {
+        ws.addInvitedMembers(realMembers, [{ projectId, role: inviteRole }]);
+        // Drop the now-redundant local invite rows — the global store is the
+        // source of truth and already reflects these people (with real ids).
+        const addedEmails = new Set(
+          realMembers.map((m) => m.email.toLowerCase()),
+        );
+        setInvites((list) =>
+          list.filter((iv) => !addedEmails.has(iv.member.email.toLowerCase())),
+        );
+      }
+
       if (data?.skipped) {
         flash(`Invited ${pending.length} (demo mode — no email sent)`);
       } else if (!res.ok || failed.length) {

@@ -186,8 +186,40 @@ export function TeamClient() {
         }),
       });
       const data = await res.json().catch(() => null);
-      const results: { ok: boolean; error?: string }[] = data?.results ?? [];
+      const results: {
+        email?: string;
+        ok: boolean;
+        error?: string;
+        memberId?: string;
+      }[] = data?.results ?? [];
       const failed = results.filter((r) => !r.ok);
+
+      // Promote the successful invites into the global workspace store so they
+      // show up everywhere (project team, assignee pickers, …) right away — not
+      // only after a reload. Use the server's real member id when present (live
+      // mode); fall back to the optimistic id in demo mode.
+      const realMembers = created
+        .map((m) => {
+          const r = results.find(
+            (x) => x.email?.toLowerCase() === m.email.toLowerCase(),
+          );
+          if (r && !r.ok) return null;
+          return { ...m, id: r?.memberId ?? m.id };
+        })
+        .filter((m): m is Member => m !== null);
+      if (realMembers.length) {
+        ws.addInvitedMembers(
+          realMembers,
+          selected.map((pid) => ({
+            projectId: pid,
+            role: (projectRoles[pid] ?? "Member") as
+              | "Admin"
+              | "Member"
+              | "Viewer",
+          })),
+        );
+      }
+
       if (data?.skipped) {
         flash(`Invited ${pending.length} (demo mode — no email sent)`);
       } else if (!res.ok || failed.length) {

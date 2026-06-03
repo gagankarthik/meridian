@@ -250,6 +250,75 @@ export function canWrite(role: string): boolean {
 }
 
 /**
+ * Create one notification per recipient, scoped to that user (the `userId`
+ * field is the recipient's MEMBER id, which bootstrap filters on). The actor
+ * (whoever triggered it) is resolved for the "who"/avatar and is never notified
+ * about their own action. `recipientIds` may contain member ids OR Cognito subs
+ * — both are resolved to the canonical member id. Best-effort: callers wrap in
+ * try/catch so a notification failure never blocks the underlying write.
+ */
+export async function notifyMembers(
+  workspaceId: string,
+  actorSub: string,
+  recipientIds: string[],
+  text: string,
+  taskId: string,
+): Promise<void> {
+  const recips = Array.from(new Set(recipientIds.filter(Boolean)));
+  if (recips.length === 0) return;
+
+  const items = await queryPartition(`WS#${workspaceId}`);
+  const members = items.filter(
+    (i) => typeof i.SK === "string" && (i.SK as string).startsWith("MEMBER#"),
+  );
+  const actor = members.find((m) => m.userId === actorSub || m.id === actorSub);
+  const who = (typeof actor?.name === "string" && actor.name) || "Someone";
+  const initials =
+    (typeof actor?.initials === "string" && actor.initials) ||
+    who.slice(0, 2).toUpperCase();
+  const hue = (typeof actor?.hue === "string" && actor.hue) || "#2563eb";
+
+  // The actor's own ids — never notify yourself about your own action.
+  const actorIds = new Set(
+    [actorSub, typeof actor?.id === "string" ? actor.id : undefined].filter(
+      (x): x is string => Boolean(x),
+    ),
+  );
+
+  // Resolve every recipient to its canonical member id, de-duplicated.
+  const recipientMemberIds = new Set<string>();
+  for (const rid of recips) {
+    if (actorIds.has(rid)) continue;
+    const m = members.find((x) => x.id === rid || x.userId === rid);
+    const memberId = m && typeof m.id === "string" ? m.id : rid;
+    if (actorIds.has(memberId)) continue;
+    recipientMemberIds.add(memberId);
+  }
+  if (recipientMemberIds.size === 0) return;
+
+  const now = Date.now();
+  await Promise.all(
+    Array.from(recipientMemberIds).map((userId, i) => {
+      const id = `n-${now.toString(36)}${i}${Math.random().toString(36).slice(2, 6)}`;
+      return putItem({
+        ...key.notification(workspaceId, id),
+        type: "notification",
+        id,
+        userId,
+        who,
+        initials,
+        hue,
+        text,
+        taskId: taskId || "",
+        time: "",
+        unread: true,
+        createdAt: now,
+      });
+    }),
+  );
+}
+
+/**
  * Resolve the caller's workspace:
  *  - by their Cognito sub (returning member/owner), or
  *  - by their email (an invited member created before first sign-in — we link

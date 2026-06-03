@@ -930,6 +930,7 @@ function WorkloadLeaderboard({ tasks }: { tasks: Task[] }) {
         </p>
       ) : (
       <div className="overflow-x-auto">
+        <div className="min-w-[460px]">
         <div className="grid grid-cols-[24px_1fr_120px_70px_70px] items-center gap-4 border-b border-line px-1 pb-2.5 text-[11px] font-bold uppercase tracking-wide text-ink-soft">
           <span>#</span>
           <span>Member</span>
@@ -1012,6 +1013,7 @@ function WorkloadLeaderboard({ tasks }: { tasks: Task[] }) {
               </motion.div>
             );
           })}
+        </div>
         </div>
       </div>
       )}

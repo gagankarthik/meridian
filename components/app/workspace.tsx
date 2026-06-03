@@ -30,6 +30,7 @@ import {
   type ProjectRole,
   type SubTask,
   type Task,
+  type TicketType,
 } from "@/lib/app-data";
 import { cognitoConfigured } from "@/lib/cognito";
 import { authedFetch } from "@/lib/api-client";
@@ -61,6 +62,7 @@ export type NewTask = {
   assigneeId?: string;
   assigneeIds?: string[];
   priority?: Priority;
+  ticketType?: TicketType;
   tag?: string;
   tagColor?: string;
   due?: string;
@@ -114,6 +116,17 @@ type WorkspaceCtx = {
   markAllNotificationsRead: () => void;
   removeMember: (id: string) => void;
   updateMember: (id: string, patch: Partial<Member>) => void;
+  /**
+   * Add freshly-invited people to the workspace store so they appear everywhere
+   * (Team page, project team, assignee pickers) immediately — not only after a
+   * reload. Persistence is already handled by the invite API; this just keeps
+   * the client in sync. `assignments` places each new member onto a project in
+   * the given role (mirroring the server's project-team assignment).
+   */
+  addInvitedMembers: (
+    newMembers: Member[],
+    assignments: { projectId: string; role: ProjectRole }[],
+  ) => void;
   /** Update the signed-in user's own profile (name / photo) everywhere. */
   updateProfile: (patch: { name?: string; avatar?: string }) => void;
   addProject: (p: NewProject) => void;
@@ -517,6 +530,45 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
         body: JSON.stringify(patch),
       });
     },
+    addInvitedMembers: (newMembers, assignments) => {
+      // Skip anyone already in the workspace (resends, or a person invited from
+      // two places at once) — match on email so we never create a duplicate row.
+      const known = new Set(members.map((m) => m.email.toLowerCase()));
+      const fresh = newMembers.filter(
+        (m) => !known.has(m.email.toLowerCase()),
+      );
+      if (fresh.length === 0) return;
+      const freshIds = fresh.map((m) => m.id);
+      setMembers((ms) => [...ms, ...fresh]);
+      // Place the new members onto each assigned project's team, keeping the
+      // role arrays mutually exclusive (mirrors the invite API's assignment).
+      if (assignments.length) {
+        setProjects((ps) =>
+          ps.map((p) => {
+            const a = assignments.find((x) => x.projectId === p.id);
+            if (!a) return p;
+            const strip = (arr: string[] = []) =>
+              arr.filter((x) => !freshIds.includes(x));
+            const next: Project = {
+              ...p,
+              adminIds: strip(p.adminIds),
+              memberIds: strip(p.memberIds),
+              viewerIds: strip(p.viewerIds),
+            };
+            const field =
+              a.role === "Admin"
+                ? "adminIds"
+                : a.role === "Viewer"
+                  ? "viewerIds"
+                  : "memberIds";
+            next[field] = [...next[field], ...freshIds];
+            return next;
+          }),
+        );
+      }
+      // No persist() here: the invite API already created the member records and
+      // assigned them to their projects server-side.
+    },
     updateProfile: (patch) => {
       // Reflect immediately in the topbar/greeting and the members list…
       if (patch.name !== undefined) {
@@ -662,6 +714,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
         title: t.title.trim() || "Untitled task",
         column: t.column,
         priority: t.priority ?? "Medium",
+        ticketType: t.ticketType ?? "Task",
         assigneeId: t.assigneeId ?? t.assigneeIds?.[0] ?? meId,
         assigneeIds:
           t.assigneeIds && t.assigneeIds.length
@@ -703,6 +756,10 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
     },
     deleteTask: (id) => {
       setTasks((ts) => ts.filter((x) => x.id !== id));
+      // A task's attached documents go with it — drop them from the shared
+      // attachments state so they disappear from the Attachments tab right
+      // away. The server cascade-deletes the records + S3 objects (DELETE route).
+      setAttachments((a) => a.filter((x) => x.taskId !== id));
       setSelectedId((s) => (s === id ? null : s));
       persist(`/api/tasks/${id}`, { method: "DELETE" });
     },

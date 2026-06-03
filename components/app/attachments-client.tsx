@@ -167,7 +167,7 @@ export function AttachmentsClient({ projectId }: { projectId: string }) {
                     title="Download"
                     disabled={!f.objectKey}
                     onClick={() => handleDownload(f.objectKey)}
-                    className="grid size-8 place-items-center rounded-lg text-ink-soft opacity-0 transition-all hover:bg-secondary hover:text-ink group-hover:opacity-100 disabled:cursor-not-allowed disabled:opacity-0 group-hover:disabled:opacity-40"
+                    className="grid size-8 place-items-center rounded-lg text-ink-soft opacity-100 transition-all hover:bg-secondary hover:text-ink disabled:cursor-not-allowed disabled:opacity-40 sm:opacity-0 sm:group-hover:opacity-100 sm:group-hover:disabled:opacity-40"
                   >
                     <Download className="size-4" />
                   </button>
@@ -176,7 +176,7 @@ export function AttachmentsClient({ projectId }: { projectId: string }) {
                       type="button"
                       title="Delete"
                       onClick={() => handleDelete(f.id)}
-                      className="grid size-8 place-items-center rounded-lg text-ink-soft opacity-0 transition-all hover:bg-red-500/10 hover:text-red-600 group-hover:opacity-100"
+                      className="grid size-8 place-items-center rounded-lg text-ink-soft opacity-100 transition-all hover:bg-red-500/10 hover:text-red-600 sm:opacity-0 sm:group-hover:opacity-100"
                     >
                       <Trash2 className="size-4" />
                     </button>

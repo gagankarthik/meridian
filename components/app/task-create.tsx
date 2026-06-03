@@ -20,12 +20,15 @@ import {
   eligibleMembersFor,
   memberById,
   priorityMeta,
+  TICKET_TYPES,
   type Member,
   type Priority,
   type SubTask,
+  type TicketType,
 } from "@/lib/app-data";
 import { useWorkspace } from "@/components/app/workspace";
 import { Avatar } from "@/components/app/widgets";
+import { TicketTypeIcon } from "@/components/app/ticket-type";
 import { cn } from "@/lib/utils";
 
 const PRIORITIES: Priority[] = ["Low", "Medium", "High", "Urgent"];
@@ -57,6 +60,7 @@ export function TaskCreate() {
   const [assigneeIds, setAssigneeIds] = useState<string[]>([]);
   const [reviewerId, setReviewerId] = useState("");
   const [priority, setPriority] = useState<Priority>("Medium");
+  const [ticketType, setTicketType] = useState<TicketType>("Task");
   const [startDate, setStartDate] = useState("");
   const [due, setDue] = useState("");
   const [tag, setTag] = useState("");
@@ -184,6 +188,7 @@ export function TaskCreate() {
       assigneeIds,
       assigneeId: assigneeIds[0],
       priority,
+      ticketType,
       due: due.trim() || undefined,
       startDate: startDate.trim() || undefined,
       reviewerId: reviewerId || undefined,
@@ -219,6 +224,32 @@ export function TaskCreate() {
         {/* ---- Header card ---- */}
         <div className="mb-5 rounded-2xl border border-line bg-card p-5 shadow-card">
           <div className="flex flex-wrap items-center gap-2">
+            {/* Ticket type */}
+            <Dropdown
+              trigger={
+                <>
+                  <TicketTypeIcon type={ticketType} />
+                  <span>{ticketType}</span>
+                </>
+              }
+            >
+              {(close) =>
+                TICKET_TYPES.map((opt) => (
+                  <MenuItem
+                    key={opt}
+                    active={opt === ticketType}
+                    onClick={() => {
+                      setTicketType(opt);
+                      close();
+                    }}
+                  >
+                    <TicketTypeIcon type={opt} />
+                    <span className="flex-1 truncate">{opt}</span>
+                  </MenuItem>
+                ))
+              }
+            </Dropdown>
+
             {/* Project (Fixed pill when locked, else dropdown) */}
             {lockedProject ? (
               <FixedPill color={project?.color}>
@@ -390,7 +421,7 @@ export function TaskCreate() {
                       type="button"
                       onClick={() => removeSub(s.id)}
                       aria-label="Remove sub-task"
-                      className="grid size-6 shrink-0 place-items-center rounded-md text-ink-soft opacity-0 transition-all group-hover:opacity-100 hover:bg-secondary hover:text-red-600"
+                      className="grid size-6 shrink-0 place-items-center rounded-md text-ink-soft opacity-100 transition-all hover:bg-secondary hover:text-red-600 sm:opacity-0 sm:group-hover:opacity-100"
                     >
                       <X className="size-3.5" />
                     </button>

@@ -37,26 +37,34 @@ const MONTH_INDEX: Record<string, number> = {
 };
 const WEEKDAY_LABELS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
-/* App reference "today" (2026-05-27). */
-const TODAY = { year: 2026, month: 4, day: 27 };
-
 type DueDate = { month: number; day: number; year: number };
 
-/* Parse a due string like "Jul 14, 2026" → { month, day, year }. */
+/* Parse a due string into { month, day, year }. Handles both the display form
+   ("Jul 14, 2026") and the ISO form the create-task date input stores
+   ("2026-07-14"), plus any other Date-parseable string as a fallback. */
 function parseDue(due: string): DueDate | null {
+  if (!due || due === "—") return null;
+  // "Jul 14, 2026"
   const m = due.match(/^([A-Za-z]{3})\s+(\d{1,2}),\s*(\d{4})$/);
-  if (!m) return null;
-  const month = MONTH_INDEX[m[1].toLowerCase()];
-  if (month === undefined) return null;
-  return { month, day: Number(m[2]), year: Number(m[3]) };
+  if (m) {
+    const month = MONTH_INDEX[m[1].toLowerCase()];
+    if (month === undefined) return null;
+    return { month, day: Number(m[2]), year: Number(m[3]) };
+  }
+  // "2026-07-14" (ISO date — read the parts directly to avoid timezone shift)
+  const iso = due.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (iso) {
+    return { year: Number(iso[1]), month: Number(iso[2]) - 1, day: Number(iso[3]) };
+  }
+  const d = new Date(due);
+  if (Number.isNaN(d.getTime())) return null;
+  return { year: d.getFullYear(), month: d.getMonth(), day: d.getDate() };
 }
 
 /* Absolute day index (days since year 0) so tasks sort/compare cleanly. */
 function dueOrdinal(d: DueDate): number {
   return d.year * 372 + d.month * 31 + d.day;
 }
-
-const TODAY_ORDINAL = TODAY.year * 372 + TODAY.month * 31 + TODAY.day;
 
 type CalCell = {
   day: number;
@@ -70,7 +78,17 @@ type CalCell = {
 
 export function DashboardCalendar() {
   const ws = useWorkspace();
-  const [cursor, setCursor] = useState({ year: 2026, month: 6 }); // July 2026
+  // Real "today", captured once (lazy init keeps render pure + stable — same
+  // pattern the dashboard charts use for `now`).
+  const [today] = useState(() => {
+    const d = new Date();
+    return { year: d.getFullYear(), month: d.getMonth(), day: d.getDate() };
+  });
+  const todayOrdinal = today.year * 372 + today.month * 31 + today.day;
+  const [cursor, setCursor] = useState(() => ({
+    year: today.year,
+    month: today.month,
+  }));
   const [hovered, setHovered] = useState<string | null>(null);
 
   const dated = useMemo(
@@ -112,15 +130,15 @@ export function DashboardCalendar() {
         inMonth: true,
         tasks: tasksByDay[day] ?? [],
         today:
-          TODAY.year === cursor.year &&
-          TODAY.month === cursor.month &&
-          TODAY.day === day,
+          today.year === cursor.year &&
+          today.month === cursor.month &&
+          today.day === day,
         key: `cur-${day}`,
       };
     });
 
     return Array.from({ length: 6 }, (_, w) => cells.slice(w * 7, w * 7 + 7));
-  }, [cursor.year, cursor.month, tasksByDay]);
+  }, [cursor.year, cursor.month, tasksByDay, today]);
 
   const dueCount = useMemo(
     () => Object.values(tasksByDay).reduce((s, list) => s + list.length, 0),
@@ -130,11 +148,11 @@ export function DashboardCalendar() {
   const upcoming = useMemo(
     () =>
       dated
-        .filter(({ date }) => dueOrdinal(date) >= TODAY_ORDINAL)
+        .filter(({ date }) => dueOrdinal(date) >= todayOrdinal)
         .sort((a, b) => dueOrdinal(a.date) - dueOrdinal(b.date))
         .slice(0, 6)
         .map((x) => x.task),
-    [dated],
+    [dated, todayOrdinal],
   );
 
   function shiftMonth(delta: number) {

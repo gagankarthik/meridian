@@ -54,7 +54,16 @@ export function OverviewClient({ projectId }: { projectId: string }) {
   const inProgress = tasks.filter((t) => t.column === "in_progress").length;
   const open = tasks.filter((t) => t.column !== "done").length;
 
-  const memberIds = useMemo(() => projectMemberIds(projectId), [projectId]);
+  // Depends on ws.projects/ws.members too: projectMemberIds reads the runtime
+  // store that mirrors them, so the People/Workload panels refresh live when a
+  // teammate is added or removed (not only when the project changes).
+  const memberIds = useMemo(
+    () => projectMemberIds(projectId),
+    // projectMemberIds reads the runtime store, so the linter can't see the
+    // ws.projects/ws.members dependency — it's intentional, keep them.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [projectId, ws.projects, ws.members],
+  );
 
   if (!project) {
     return (

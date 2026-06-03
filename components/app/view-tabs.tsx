@@ -23,9 +23,13 @@ import {
   memberById,
   priorityMeta,
   projectMemberIds,
+  ticketTypeOf,
+  TICKET_TYPES,
   type Priority,
+  type TicketType,
 } from "@/lib/app-data";
 import { MemberAvatar, ProjectAvatar, StatusChip } from "@/components/app/widgets";
+import { TicketTypeIcon } from "@/components/app/ticket-type";
 import { useWorkspace } from "@/components/app/workspace";
 import { cn } from "@/lib/utils";
 
@@ -125,7 +129,7 @@ export function ProjectViewHeader({
 
       {/* tabs + right-aligned project search / filter */}
       <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 px-2 sm:px-4">
-        <div className="flex min-w-0 flex-1 flex-wrap items-center gap-0.5">
+        <div className="no-scrollbar -mb-px flex min-w-0 flex-1 items-center gap-0.5 overflow-x-auto">
           {TABS.map((t) => {
             const active = t.id === current;
             return (
@@ -167,6 +171,7 @@ function ProjectSearchFilter({ projectId }: { projectId: string }) {
   const [filterOpen, setFilterOpen] = useState(false);
   const [priorities, setPriorities] = useState<Set<Priority>>(new Set());
   const [statuses, setStatuses] = useState<Set<string>>(new Set());
+  const [types, setTypes] = useState<Set<TicketType>>(new Set());
 
   useEffect(() => {
     const onDown = (e: MouseEvent) => {
@@ -183,7 +188,7 @@ function ProjectSearchFilter({ projectId }: { projectId: string }) {
     () => ws.tasks.filter((t) => t.projectId === projectId),
     [ws.tasks, projectId],
   );
-  const activeFilters = priorities.size + statuses.size;
+  const activeFilters = priorities.size + statuses.size + types.size;
 
   const results = useMemo(() => {
     const query = q.trim().toLowerCase();
@@ -192,10 +197,11 @@ function ProjectSearchFilter({ projectId }: { projectId: string }) {
         if (query && !t.title.toLowerCase().includes(query)) return false;
         if (priorities.size && !priorities.has(t.priority)) return false;
         if (statuses.size && !statuses.has(t.column)) return false;
+        if (types.size && !types.has(ticketTypeOf(t))) return false;
         return true;
       })
       .slice(0, 8);
-  }, [projectTasks, q, priorities, statuses]);
+  }, [projectTasks, q, priorities, statuses, types]);
 
   const togglePriority = (p: Priority) =>
     setPriorities((s) => {
@@ -211,9 +217,17 @@ function ProjectSearchFilter({ projectId }: { projectId: string }) {
       else n.add(id);
       return n;
     });
+  const toggleType = (t: TicketType) =>
+    setTypes((s) => {
+      const n = new Set(s);
+      if (n.has(t)) n.delete(t);
+      else n.add(t);
+      return n;
+    });
   const clearFilters = () => {
     setPriorities(new Set());
     setStatuses(new Set());
+    setTypes(new Set());
   };
 
   const showResults = resultsOpen && (q.trim().length > 0 || activeFilters > 0);
@@ -309,7 +323,7 @@ function ProjectSearchFilter({ projectId }: { projectId: string }) {
         <div className="absolute right-0 top-full z-[80] mt-2 w-64 rounded-xl border border-line bg-popover p-3 shadow-float">
           <div className="flex items-center justify-between">
             <span className="text-[11px] font-bold uppercase tracking-wide text-ink-soft">
-              Priority
+              Type
             </span>
             {activeFilters > 0 && (
               <button
@@ -320,6 +334,33 @@ function ProjectSearchFilter({ projectId }: { projectId: string }) {
                 Clear all
               </button>
             )}
+          </div>
+          <div className="mt-2 flex flex-wrap gap-1.5">
+            {TICKET_TYPES.map((tt) => {
+              const on = types.has(tt);
+              return (
+                <button
+                  key={tt}
+                  type="button"
+                  onClick={() => toggleType(tt)}
+                  className={cn(
+                    "inline-flex items-center gap-1.5 rounded-md border px-2 py-1 text-[11px] font-semibold transition-colors",
+                    on
+                      ? "border-signal bg-signal-soft text-signal"
+                      : "border-line bg-card text-ink-muted hover:bg-secondary",
+                  )}
+                >
+                  <TicketTypeIcon type={tt} className="size-3" />
+                  {tt}
+                </button>
+              );
+            })}
+          </div>
+
+          <div className="mt-3 border-t border-line pt-3">
+            <span className="text-[11px] font-bold uppercase tracking-wide text-ink-soft">
+              Priority
+            </span>
           </div>
           <div className="mt-2 flex flex-wrap gap-1.5">
             {PRIORITIES.map((p) => {

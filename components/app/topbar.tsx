@@ -16,6 +16,7 @@ import {
   X,
 } from "lucide-react";
 import { Avatar } from "@/components/app/widgets";
+import { relativeTime } from "@/lib/app-data";
 import { useWorkspace } from "@/components/app/workspace";
 import { cognitoConfigured } from "@/lib/cognito";
 import { projectHref, useDefaultProjectView } from "@/lib/preferences";
@@ -169,7 +170,7 @@ function SearchBar() {
 /* -------------------------- Notifications -------------------------- */
 function Notifications() {
   const [open, setOpen] = useState(false);
-  const { notifications, activity, members, markNotificationRead, markAllNotificationsRead } =
+  const { notifications, activity, members, markNotificationRead, markAllNotificationsRead, openTask } =
     useWorkspace();
   const unread = notifications.filter((n) => n.unread).length;
   const recentActivity = activity.slice(0, 12);
@@ -220,7 +221,13 @@ function Notifications() {
                   <button
                     key={n.id}
                     type="button"
-                    onClick={() => n.unread && markNotificationRead(n.id)}
+                    onClick={() => {
+                      if (n.unread) markNotificationRead(n.id);
+                      if (n.taskId) {
+                        setOpen(false);
+                        openTask(n.taskId);
+                      }
+                    }}
                     className={cn(
                       "flex w-full gap-3 px-4 py-3 text-left transition-colors hover:bg-paper-raised",
                       n.unread && "bg-signal-soft/40",
@@ -237,7 +244,9 @@ function Notifications() {
                       <p className="text-[13px] leading-snug text-ink">
                         <span className="font-semibold">{n.who}</span> {n.text}
                       </p>
-                      <span className="text-[11px] text-ink-soft">{n.time} ago</span>
+                      <span className="text-[11px] text-ink-soft">
+                        {n.createdAt ? relativeTime(n.createdAt) : `${n.time} ago`}
+                      </span>
                     </div>
                     {n.unread && (
                       <span className="mt-1.5 size-2 shrink-0 rounded-full bg-signal" />

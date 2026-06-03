@@ -16,10 +16,13 @@ import {
   COLUMN_LABEL,
   memberById,
   projectById,
+  taskKey,
+  ticketTypeOf,
   type Task,
 } from "@/lib/app-data";
 import { AvatarStack } from "@/components/app/widgets";
 import { ProjectViewHeader } from "@/components/app/view-tabs";
+import { TicketTypeIcon } from "@/components/app/ticket-type";
 import { useWorkspace } from "@/components/app/workspace";
 import { cn } from "@/lib/utils";
 
@@ -337,25 +340,35 @@ export function TimelineClient({ projectId }: { projectId: string }) {
             ref={canvasRef}
             className="min-h-0 flex-1 overflow-auto rounded-2xl border border-line bg-card shadow-card"
           >
-            <div className="relative min-w-max">
+            <div className="relative flex min-h-full min-w-max flex-col">
               {/* Header row: sticky "Tasks" cell + month cells */}
-              <div className="sticky top-0 z-20 flex h-11">
-                <div className="sticky left-0 z-30 flex w-44 shrink-0 items-center border-b border-r border-line bg-paper-raised px-4 text-[12px] font-bold tracking-tight text-ink sm:w-72">
-                  Tasks
+              <div className="sticky top-0 z-20 flex h-11 shrink-0">
+                <div className="sticky left-0 z-30 flex w-44 shrink-0 items-center justify-between border-b border-r border-line bg-paper-raised px-4 text-[12px] font-bold tracking-tight text-ink sm:w-72">
+                  <span>Tasks</span>
+                  <span className="tnum hidden text-[11px] font-semibold text-ink-soft sm:inline">
+                    {spans.length}
+                  </span>
                 </div>
                 <div className="flex border-b border-line bg-paper-raised">
-                  {months.map((m) => {
+                  {months.map((m, i) => {
                     const current = isSameMonth(m, today);
                     return (
                       <div
                         key={m.toISOString()}
                         style={{ width: colW }}
                         className={cn(
-                          "flex shrink-0 items-center justify-center border-r border-line/50 text-[11px] font-semibold",
-                          current ? "text-signal" : "text-ink-muted",
+                          "flex shrink-0 items-center justify-center border-r border-line/50 text-[11px] font-semibold uppercase tracking-wide",
+                          current
+                            ? "text-signal"
+                            : i % 2
+                              ? "bg-sunken/40 text-ink-soft"
+                              : "text-ink-soft",
                         )}
                       >
-                        {format(m, "MMM yyyy")}
+                        {current && (
+                          <span className="mr-1.5 size-1.5 rounded-full bg-signal" />
+                        )}
+                        {format(m, colW < 100 ? "MMM" : "MMM yyyy")}
                       </div>
                     );
                   })}
@@ -363,24 +376,33 @@ export function TimelineClient({ projectId }: { projectId: string }) {
               </div>
 
               {/* Body: frozen task list + scrollable canvas */}
-              <div className="flex">
+              <div className="flex min-h-0 flex-1">
                 {/* Left column (frozen) */}
-                <div className="sticky left-0 z-10 w-44 shrink-0 bg-card sm:w-72">
+                <div className="sticky left-0 z-10 w-44 shrink-0 border-r border-line/60 bg-card sm:w-72">
                   {spans.map(({ task }) => (
                     <button
                       key={task.id}
                       type="button"
                       onClick={() => ws.openTask(task.id)}
                       style={{ height: ROW_H }}
-                      className="flex w-full items-center gap-2 border-b border-r border-line/60 px-4 text-left transition-colors hover:bg-secondary"
+                      className="group flex w-full items-center gap-2.5 border-b border-r border-line/60 px-4 text-left transition-colors hover:bg-secondary"
                     >
                       <span
-                        className="size-2 shrink-0 rounded-full"
-                        style={{ background: statusColor(task.column) }}
+                        className="grid size-6 shrink-0 place-items-center rounded-md"
+                        style={{
+                          background: `color-mix(in srgb, ${statusColor(task.column)} 12%, transparent)`,
+                        }}
                         title={COLUMN_LABEL[task.column] ?? task.column}
-                      />
-                      <span className="min-w-0 flex-1 truncate text-[12.5px] font-medium text-ink">
-                        {task.title}
+                      >
+                        <TicketTypeIcon type={ticketTypeOf(task)} className="size-3.5" />
+                      </span>
+                      <span className="flex min-w-0 flex-1 flex-col">
+                        <span className="truncate text-[12.5px] font-medium leading-tight text-ink">
+                          {task.title}
+                        </span>
+                        <span className="hidden truncate font-mono text-[10px] text-ink-soft sm:block">
+                          {taskKey(task)}
+                        </span>
                       </span>
                       <AvatarStack ids={task.assigneeIds} size={20} max={2} />
                     </button>
@@ -400,8 +422,9 @@ export function TimelineClient({ projectId }: { projectId: string }) {
                   {spans.map(({ task, start, end }) => {
                     const color = statusColor(task.column);
                     const left = dateX(start);
-                    const width = Math.max(dateX(end) - left, 10);
+                    const width = Math.max(dateX(end) - left, 12);
                     const pct = progressPct(task);
+                    const done = task.column === "done";
                     return (
                       <div
                         key={task.id}
@@ -411,25 +434,43 @@ export function TimelineClient({ projectId }: { projectId: string }) {
                         <button
                           type="button"
                           onClick={() => ws.openTask(task.id)}
-                          title={`${task.title} · ${pct}%`}
+                          title={`${task.title} · ${COLUMN_LABEL[task.column] ?? task.column} · ${pct}%`}
                           style={{
                             left,
                             width,
                             top: "50%",
                             transform: "translateY(-50%)",
-                            background: `${color}26`,
-                            borderLeft: `4px solid ${color}`,
+                            background: `color-mix(in srgb, ${color} 14%, var(--card))`,
+                            boxShadow: `inset 0 0 0 1px color-mix(in srgb, ${color} 38%, transparent)`,
                           }}
-                          className="absolute flex h-7 items-center overflow-hidden rounded-lg px-2 transition-shadow hover:shadow-raised"
+                          className="group/bar absolute flex h-8 items-center gap-1.5 overflow-hidden rounded-full pr-2 pl-2.5 transition-all hover:-translate-y-px hover:shadow-raised"
                         >
+                          {/* progress fill */}
                           <span
                             aria-hidden
-                            style={{ width: `${pct}%`, background: `${color}4d` }}
-                            className="absolute inset-y-0 left-0 rounded-l"
+                            style={{
+                              width: `${pct}%`,
+                              background: `color-mix(in srgb, ${color} 30%, transparent)`,
+                            }}
+                            className="absolute inset-y-0 left-0"
                           />
-                          <span className="relative truncate text-[11px] font-medium text-ink">
+                          {/* leading status dot */}
+                          <span
+                            aria-hidden
+                            className="relative size-2 shrink-0 rounded-full"
+                            style={{ background: color }}
+                          />
+                          <span className="relative min-w-0 flex-1 truncate text-[11px] font-semibold text-ink">
                             {task.title}
                           </span>
+                          {width > 84 && (
+                            <span
+                              className="tnum relative shrink-0 text-[10px] font-bold"
+                              style={{ color: done ? "#1f9d6b" : color }}
+                            >
+                              {pct}%
+                            </span>
+                          )}
                         </button>
                       </div>
                     );
@@ -437,10 +478,10 @@ export function TimelineClient({ projectId }: { projectId: string }) {
 
                   {/* Today marker */}
                   <div
-                    className="pointer-events-none absolute bottom-0 top-0 z-20 w-px bg-signal"
+                    className="pointer-events-none absolute bottom-0 top-0 z-20 w-px bg-signal/70"
                     style={{ left: dateX(today) }}
                   >
-                    <span className="absolute -left-px top-0 rounded-b-md bg-signal px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide text-white">
+                    <span className="absolute -left-[18px] top-0 rounded-b-md bg-signal px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide text-white shadow-card">
                       Today
                     </span>
                   </div>

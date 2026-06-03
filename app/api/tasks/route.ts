@@ -3,6 +3,7 @@ import {
   canWrite,
   eligibleAssigneeIds,
   getProjectRole,
+  notifyMembers,
   requireWorkspace,
 } from "@/lib/workspace-server";
 
@@ -95,6 +96,7 @@ export async function POST(request: Request) {
     title,
     column: body.column ?? "backlog",
     priority: body.priority ?? "Medium",
+    ticketType: body.ticketType ?? "Task",
     assigneeId: assigneeIds[0] ?? "",
     assigneeIds,
     projectId: body.projectId,
@@ -109,5 +111,33 @@ export async function POST(request: Request) {
     comments: Array.isArray(body.comments) ? body.comments : [],
   };
   await putItem(task);
+
+  // Notify the people put on this task (assignees + reviewer), each scoped to
+  // their own account. Best-effort — never let a notification failure block the
+  // task creation.
+  try {
+    const quoted = `"${title}"`;
+    if (assigneeIds.length) {
+      await notifyMembers(
+        r.ctx.workspaceId,
+        r.ctx.userId,
+        assigneeIds,
+        `assigned you to ${quoted}`,
+        id,
+      );
+    }
+    if (reviewerId) {
+      await notifyMembers(
+        r.ctx.workspaceId,
+        r.ctx.userId,
+        [reviewerId],
+        `requested your review on ${quoted}`,
+        id,
+      );
+    }
+  } catch (err) {
+    console.error("[tasks.POST] notify failed", err);
+  }
+
   return Response.json({ task: stripKeys(task) }, { status: 201 });
 }

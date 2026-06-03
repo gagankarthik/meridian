@@ -112,18 +112,28 @@ export async function GET(request: Request) {
   let visibleApprovals = approvals;
   let visibleAttachments = attachments;
 
+  // The caller's own ids (Cognito sub + their member record id, which may be an
+  // invite id ≠ the sub). Used for both project visibility and notifications.
+  const myMember = members.find(
+    (m) => m.userId === ctx.userId || m.id === ctx.userId,
+  );
+  const myIds = [ctx.userId, myMember?.id]
+    .filter(Boolean)
+    .map((x) => String(x));
+
+  // Notifications are per-recipient: only the ones addressed to this user (or
+  // legacy ones with no recipient) reach the client — never everyone's.
+  const myNotifications = notifications.filter((n) => {
+    const target = n.userId ? String(n.userId) : "";
+    return target === "" || myIds.includes(target);
+  });
+
   if (!isAdmin) {
-    const myMember = members.find(
-      (m) => m.userId === ctx.userId || m.id === ctx.userId,
-    );
     const granted = new Set(
       Array.isArray(myMember?.projects)
         ? (myMember!.projects as unknown[]).map(String)
         : [],
     );
-    const myIds = [ctx.userId, myMember?.id]
-      .filter(Boolean)
-      .map((x) => String(x));
     const onProject = (arr: unknown) =>
       Array.isArray(arr) && arr.some((x) => myIds.includes(String(x)));
 
@@ -154,7 +164,7 @@ export async function GET(request: Request) {
     tasks: visibleTasks,
     columns: columns.sort((a, b) => Number(a.order ?? 0) - Number(b.order ?? 0)),
     activity: activity.sort(byCreatedDesc),
-    notifications: notifications.sort(byCreatedDesc),
+    notifications: myNotifications.sort(byCreatedDesc),
     approvals: visibleApprovals.sort(byCreatedDesc),
     attachments: visibleAttachments.sort(byCreatedDesc),
   });

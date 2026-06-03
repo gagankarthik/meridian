@@ -19,7 +19,12 @@ import {
   min as minDate,
   startOfQuarter,
 } from "date-fns";
-import { memberById, projectMemberIds } from "@/lib/app-data";
+import {
+  memberById,
+  projectMemberIds,
+  projectProgress,
+  projectTaskStats,
+} from "@/lib/app-data";
 import type { Project } from "@/lib/app-data";
 import {
   AvatarStack,
@@ -171,7 +176,10 @@ export function RoadmapClient() {
   const defaultView = useDefaultProjectView();
   const [activeId, setActiveId] = useState<string | null>(null);
 
-  // Aggregate stats computed from real workspace data.
+  // Aggregate stats computed from real workspace data. Progress is derived live
+  // from each project's tasks (done ÷ total) — never the stale stored field —
+  // so the roadmap reflects work as it moves. ws.tasks is a dependency so the
+  // memos below recompute when task state changes.
   const total = ws.projects.length;
   const activeCount = ws.projects.filter((p) => p.status === "On track").length;
   const openTasks = ws.tasks.filter((t) => t.column !== "done").length;
@@ -179,13 +187,17 @@ export function RoadmapClient() {
     total === 0
       ? 0
       : Math.round(
-          ws.projects.reduce((sum, p) => sum + (p.progress ?? 0), 0) / total,
+          ws.projects.reduce((sum, p) => sum + projectProgress(p.id), 0) / total,
         );
 
   // Featured = furthest-along project; lanes follow start date then progress.
   const ordered = useMemo(
-    () => [...ws.projects].sort((a, b) => b.progress - a.progress),
-    [ws.projects],
+    () =>
+      [...ws.projects].sort(
+        (a, b) => projectProgress(b.id) - projectProgress(a.id),
+      ),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [ws.projects, ws.tasks],
   );
   const featured = ordered[0];
 
@@ -195,9 +207,10 @@ export function RoadmapClient() {
         const sa = parseISO(a.startDate)?.getTime() ?? Infinity;
         const sb = parseISO(b.startDate)?.getTime() ?? Infinity;
         if (sa !== sb) return sa - sb;
-        return b.progress - a.progress;
+        return projectProgress(b.id) - projectProgress(a.id);
       }),
-    [ws.projects],
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [ws.projects, ws.tasks],
   );
 
   const quarters = useMemo(() => buildQuarters(ws.projects), [ws.projects]);
@@ -270,10 +283,10 @@ export function RoadmapClient() {
           </h3>
           <div className="mt-auto flex items-center gap-3 pt-4">
             <span className="grow">
-              <ProgressBar value={featured.progress} color={featured.color} />
+              <ProgressBar value={projectProgress(featured.id)} color={featured.color} />
             </span>
             <span className="tnum text-[12.5px] font-semibold text-ink">
-              {featured.progress}%
+              {projectProgress(featured.id)}%
             </span>
             <ArrowUpRight className="size-4 text-ink-soft transition-transform group-hover:translate-x-0.5 group-hover:-translate-y-0.5" />
           </div>
@@ -316,6 +329,8 @@ export function RoadmapClient() {
               const lead = p.ownerId ? memberById(p.ownerId) : undefined;
               const geo = barGeometry(p, quarters);
               const isActive = p.id === activeId;
+              const stats = projectTaskStats(p.id);
+              const pct = stats.progress;
               return (
                 <div
                   key={p.id}
@@ -345,7 +360,10 @@ export function RoadmapClient() {
                         {p.name}
                       </span>
                       <span className="block truncate font-mono text-[10.5px] text-ink-soft">
-                        {p.key}
+                        {p.key} ·{" "}
+                        {stats.total === 0
+                          ? "no tasks"
+                          : `${stats.done}/${stats.total} done`}
                       </span>
                     </span>
                   </button>
@@ -386,15 +404,20 @@ export function RoadmapClient() {
                             style={{ background: p.color }}
                           />
                           <span
-                            className="absolute inset-y-0 left-0 opacity-90"
+                            className="absolute inset-y-0 left-0 opacity-90 transition-[width] duration-500"
                             style={{
-                              width: `${p.progress}%`,
+                              width: `${pct}%`,
                               background: p.color,
                             }}
                           />
                           <span className="relative z-10 flex w-full items-center gap-1.5 px-2.5">
-                            <span className="truncate text-[11px] font-bold text-white mix-blend-luminosity drop-shadow">
-                              {p.progress}%
+                            {geo.widthPct > 16 && (
+                              <span className="truncate text-[11px] font-semibold text-white mix-blend-luminosity drop-shadow">
+                                {p.name}
+                              </span>
+                            )}
+                            <span className="ml-auto shrink-0 text-[11px] font-bold text-white mix-blend-luminosity drop-shadow">
+                              {pct}%
                             </span>
                           </span>
                         </>
@@ -495,14 +518,22 @@ function ProjectSheet({
                 <div className="flex items-center gap-3">
                   <span className="grow">
                     <ProgressBar
-                      value={project.progress}
+                      value={projectTaskStats(project.id).progress}
                       color={project.color}
                     />
                   </span>
                   <span className="tnum text-[12.5px] font-semibold text-ink">
-                    {project.progress}%
+                    {projectTaskStats(project.id).progress}%
                   </span>
                 </div>
+                <p className="mt-2 text-[12px] text-ink-soft">
+                  {(() => {
+                    const s = projectTaskStats(project.id);
+                    return s.total === 0
+                      ? "No tasks yet."
+                      : `${s.done} done · ${s.open} open · ${s.total} total`;
+                  })()}
+                </p>
               </DetailRow>
             </div>
 

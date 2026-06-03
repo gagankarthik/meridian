@@ -6,16 +6,21 @@ import { AnimatePresence, motion } from "motion/react";
 import {
   ArrowLeft,
   ArrowRight,
+  CalendarDays,
+  CheckSquare,
   ChevronLeft,
   ChevronRight,
+  Clock3,
   GripVertical,
+  MessageSquare,
   MoreHorizontal,
   Pencil,
   Plus,
   Trash2,
 } from "lucide-react";
-import { priorityMeta, taskKey } from "@/lib/app-data";
+import { priorityMeta, taskKey, ticketTypeOf } from "@/lib/app-data";
 import { AvatarStack } from "@/components/app/widgets";
+import { TicketTypeIcon } from "@/components/app/ticket-type";
 import { ProjectViewHeader } from "@/components/app/view-tabs";
 import { useWorkspace } from "@/components/app/workspace";
 import { cn } from "@/lib/utils";
@@ -285,6 +290,10 @@ export function BoardClient({ projectId }: { projectId: string }) {
                 <div className="flex-1 space-y-2.5 px-2.5 pb-2.5">
                   {colTasks.map((t) => {
                     const pr = priorityMeta[t.priority];
+                    const subs = t.subtasks ?? [];
+                    const subsDone = subs.filter((s) => s.done).length;
+                    const commentCount = t.comments?.length ?? 0;
+                    const hasDue = t.due && t.due !== "—";
                     return (
                       <article
                         key={t.id}
@@ -296,33 +305,94 @@ export function BoardClient({ projectId }: { projectId: string }) {
                         }}
                         onClick={() => ws.openTask(t.id)}
                         className={cn(
-                          "group relative rounded-xl border border-line bg-card p-3 shadow-card transition-all hover:-translate-y-0.5 hover:shadow-raised",
+                          "group relative overflow-hidden rounded-xl border border-line bg-card py-2.5 pl-4 pr-3 shadow-card transition-all hover:-translate-y-0.5 hover:border-line-strong hover:shadow-raised",
                           canEdit ? "cursor-grab active:cursor-grabbing" : "cursor-pointer",
                           dragId === t.id && "opacity-40",
                         )}
                       >
-                        <div className="mb-2 flex items-center justify-between">
-                          <span className="flex items-center gap-1.5">
-                            <span className="size-1.5 rounded-full" style={{ background: t.tagColor }} />
-                            <span className="text-[10px] font-bold uppercase tracking-wide text-ink-soft">
-                              {t.tag}
+                        {/* priority spine */}
+                        <span
+                          aria-hidden
+                          className="absolute inset-y-0 left-0 w-1"
+                          style={{ background: pr.color }}
+                        />
+
+                        {/* ticket type + id + priority */}
+                        <div className="mb-1.5 flex items-center justify-between gap-2">
+                          <span className="flex min-w-0 items-center gap-1.5">
+                            <TicketTypeIcon
+                              type={ticketTypeOf(t)}
+                              className="size-3.5 shrink-0"
+                            />
+                            <span className="truncate font-mono text-[11px] font-bold tracking-wide text-ink-soft">
+                              {taskKey(t)}
                             </span>
                           </span>
                           <span
-                            className="rounded-[4px] px-1 text-[9px] font-bold tracking-wide text-white"
+                            className="rounded-md px-1.5 py-0.5 text-[9px] font-bold tracking-wide text-white"
                             style={{ background: pr.color }}
+                            title={`${t.priority} priority`}
                           >
                             {pr.label}
                           </span>
                         </div>
-                        <p className="text-[13px] font-semibold leading-snug text-ink">{t.title}</p>
-                        <div className="mt-3 flex items-center justify-between">
-                          <AvatarStack ids={t.assigneeIds} size={22} />
-                          <span className="tnum flex items-center gap-1.5 text-[10px] font-medium text-ink-soft">
-                            <span className="font-mono font-semibold text-ink-muted">{taskKey(t)}</span>
-                            <span className="text-ink-soft/40">·</span>
-                            {t.due}
+
+                        <p className="line-clamp-2 text-[13px] font-semibold leading-snug text-ink">
+                          {t.title}
+                        </p>
+
+                        {/* label + review status */}
+                        <div className="mt-2 flex flex-wrap items-center gap-1.5">
+                          <span
+                            className="inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[10px] font-semibold"
+                            style={{
+                              color: t.tagColor,
+                              background: `color-mix(in srgb, ${t.tagColor} 12%, transparent)`,
+                            }}
+                          >
+                            <span
+                              className="size-1.5 rounded-full"
+                              style={{ background: t.tagColor }}
+                            />
+                            {t.tag}
                           </span>
+                          {t.reviewStatus === "pending" && (
+                            <span className="inline-flex items-center gap-1 rounded-md bg-[#e2a200]/12 px-1.5 py-0.5 text-[10px] font-semibold text-[#a06a00] dark:text-[#e2a200]">
+                              <Clock3 className="size-3" strokeWidth={2.2} />
+                              In review
+                            </span>
+                          )}
+                        </div>
+
+                        {/* footer: assignees + meta */}
+                        <div className="mt-2.5 flex items-center justify-between gap-2 border-t border-line/70 pt-2">
+                          <AvatarStack ids={t.assigneeIds} size={22} />
+                          <div className="tnum flex items-center gap-2.5 text-[10.5px] font-medium text-ink-soft">
+                            {subs.length > 0 && (
+                              <span
+                                className="inline-flex items-center gap-1"
+                                title={`${subsDone} of ${subs.length} subtasks done`}
+                              >
+                                <CheckSquare className="size-3.5" strokeWidth={1.9} />
+                                {subsDone}/{subs.length}
+                              </span>
+                            )}
+                            {commentCount > 0 && (
+                              <span
+                                className="inline-flex items-center gap-1"
+                                title={`${commentCount} comments`}
+                              >
+                                <MessageSquare className="size-3.5" strokeWidth={1.9} />
+                                {commentCount}
+                              </span>
+                            )}
+                            {hasDue && (
+                              <span className="inline-flex items-center gap-1">
+                                <CalendarDays className="size-3.5" strokeWidth={1.9} />
+                                {t.due}
+                              </span>
+                            )}
+                          </div>
                         </div>
                       </article>
                     );

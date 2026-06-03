@@ -282,6 +282,15 @@
   text-wrap: balance;
 }
 
+/* Horizontal scroll strip with no visible scrollbar (mobile tab rows, etc.) */
+@utility no-scrollbar {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+  &::-webkit-scrollbar {
+    display: none;
+  }
+}
+
 /* ---- Keyframes -------------------------------------------- */
 @keyframes marquee {
   from {

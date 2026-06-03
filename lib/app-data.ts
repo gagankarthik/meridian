@@ -30,6 +30,21 @@ export type Member = {
 export type ColumnId = string;
 export type Priority = "Low" | "Medium" | "High" | "Urgent";
 
+/** Ticket type — the kind of work a ticket represents (Jira-style issue type). */
+export type TicketType =
+  | "Task"
+  | "Bug"
+  | "Feature"
+  | "Improvement"
+  | "Chore";
+export const TICKET_TYPES: TicketType[] = [
+  "Task",
+  "Bug",
+  "Feature",
+  "Improvement",
+  "Chore",
+];
+
 export type Task = {
   id: string;
   title: string;
@@ -48,6 +63,10 @@ export type Task = {
   reviewerId?: string;
   /** Review workflow: set when a task is sent for review and decided on.
       "pending" while awaiting the reviewer; "approved"/"rejected" after. */
+  /** Issue type (Bug/Feature/Task/…). Optional — defaults to "Task" when unset
+      so existing tickets keep working. Stored as `ticketType` (not `type`,
+      which is the reserved DynamoDB record discriminator). */
+  ticketType?: TicketType;
   reviewStatus?: "pending" | "approved" | "rejected";
   /** Reason the reviewer gave when requesting changes (optional). */
   reviewNote?: string;
@@ -123,6 +142,25 @@ export const priorityMeta: Record<Priority, { color: string; label: string }> = 
   Low: { color: "#6c6859", label: "P3" },
 };
 
+/** Visual meta for each ticket type. `icon` is a lucide icon name resolved by
+    the component (lib stays free of React imports). */
+export const ticketTypeMeta: Record<
+  TicketType,
+  { color: string; icon: string }
+> = {
+  Task: { color: "#2563eb", icon: "SquareCheck" },
+  Bug: { color: "#e5484d", icon: "Bug" },
+  Feature: { color: "#7c5cff", icon: "Sparkles" },
+  Improvement: { color: "#1d9aaa", icon: "TrendingUp" },
+  Chore: { color: "#8b909c", icon: "Wrench" },
+};
+
+/** The ticket's issue type, defaulting to "Task" for tickets created before
+    the field existed. */
+export function ticketTypeOf(t: { ticketType?: TicketType }): TicketType {
+  return t.ticketType ?? "Task";
+}
+
 /* ---- Runtime store --------------------------------------------------------
    Seeded with the demo arrays above; replaced wholesale with live DynamoDB
    data once a workspace bootstraps (see WorkspaceProvider). The read-only
@@ -167,6 +205,12 @@ export type Notification = {
   text: string;
   time: string;
   unread: boolean;
+  /** Recipient member id — notifications are scoped to a single user. */
+  userId?: string;
+  /** Deep-link target: open this task when the notification is clicked. */
+  taskId?: string;
+  /** Creation timestamp (ms) used to render a live relative time. */
+  createdAt?: number;
 };
 
 export const NOTIFICATIONS: Notification[] = [];
@@ -189,6 +233,31 @@ export function projectRole(
   if (p.memberIds.includes(memberId)) return "Member";
   if (p.viewerIds.includes(memberId)) return "Viewer";
   return null;
+}
+
+/** Live task counts for a project, read from the runtime store. */
+export function projectTaskStats(projectId: string): {
+  total: number;
+  done: number;
+  open: number;
+  progress: number;
+} {
+  const ts = runtime.tasks.filter((t) => t.projectId === projectId);
+  const total = ts.length;
+  const done = ts.filter((t) => t.column === "done").length;
+  const open = total - done;
+  const progress = total ? Math.round((done / total) * 100) : 0;
+  return { total, done, open, progress };
+}
+
+/** A project's completion %, derived live from its tasks (done ÷ total). */
+export function projectProgress(projectId: string): number {
+  return projectTaskStats(projectId).progress;
+}
+
+/** Count of a project's not-done tasks, derived live. */
+export function projectOpenCount(projectId: string): number {
+  return projectTaskStats(projectId).open;
 }
 
 /** All member ids on a project: owner ∪ admins ∪ members ∪ viewers ∪ task assignees. */

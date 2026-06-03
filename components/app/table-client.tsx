@@ -21,9 +21,11 @@ import {
   priorityMeta,
   subtaskKey,
   taskKey,
+  ticketTypeOf,
 } from "@/lib/app-data";
 import { useWorkspace } from "@/components/app/workspace";
 import { AvatarStack, ProgressBar } from "@/components/app/widgets";
+import { TicketTypeIcon } from "@/components/app/ticket-type";
 import { cn } from "@/lib/utils";
 
 const GROUP_TINT: Record<string, string> = {
@@ -38,7 +40,7 @@ const GROUP_TINT: Record<string, string> = {
 // every column lines up like a real spreadsheet. Each non-first cell carries a
 // left border to form subtle vertical separators.
 const GRID =
-  "grid grid-cols-[32px_36px_minmax(220px,1.4fr)_minmax(200px,1.6fr)_110px_120px_130px_180px]";
+  "grid grid-cols-[32px_36px_minmax(220px,1.4fr)_112px_minmax(200px,1.6fr)_110px_120px_130px_180px]";
 
 function progressFor(column: string) {
   const base: Record<string, number> = {
@@ -146,6 +148,7 @@ export function TableClient({ projectId }: { projectId: string }) {
             <span />
             <span />
             <span>Task</span>
+            <span>Type</span>
             <span>Description</span>
             <span>Assignees</span>
             <span>Priority</span>
@@ -396,6 +399,17 @@ export function TableClient({ projectId }: { projectId: string }) {
                               </span>
                             </div>
 
+                            {/* ticket type */}
+                            <div className="gap-1.5">
+                              <TicketTypeIcon
+                                type={ticketTypeOf(t)}
+                                className="size-3.5 shrink-0"
+                              />
+                              <span className="truncate text-[12.5px] font-medium text-ink-muted">
+                                {ticketTypeOf(t)}
+                              </span>
+                            </div>
+
                             {/* description (1-line truncated) */}
                             <div>
                               <span className="truncate text-[12.5px] text-ink-soft">
@@ -504,6 +518,7 @@ export function TableClient({ projectId }: { projectId: string }) {
                                       {s.title}
                                     </span>
                                   </div>
+                                  <div />
                                   <div />
                                   <div />
                                   <div />
