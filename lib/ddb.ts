@@ -49,6 +49,7 @@ export const key = {
   approval: (wid: string, aid: string) => ({ PK: `WS#${wid}`, SK: `APPROVAL#${aid}` }),
   notification: (wid: string, nid: string) => ({ PK: `WS#${wid}`, SK: `NOTIF#${nid}` }),
   attach: (wid: string, aid: string) => ({ PK: `WS#${wid}`, SK: `ATTACH#${aid}` }),
+  document: (wid: string, did: string) => ({ PK: `WS#${wid}`, SK: `DOC#${did}` }),
 };
 
 export type Item = Record<string, unknown>;

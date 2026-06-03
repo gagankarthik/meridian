@@ -65,6 +65,7 @@ export async function GET(request: Request) {
   const notifications: Record<string, unknown>[] = [];
   const approvals: Record<string, unknown>[] = [];
   const attachments: Record<string, unknown>[] = [];
+  const documents: Record<string, unknown>[] = [];
 
   for (const it of items) {
     const sk = String(it.SK);
@@ -83,6 +84,7 @@ export async function GET(request: Request) {
     else if (sk.startsWith("NOTIF#")) notifications.push(clean(it));
     else if (sk.startsWith("APPROVAL#")) approvals.push(clean(it));
     else if (sk.startsWith("ATTACH#")) attachments.push(clean(it));
+    else if (sk.startsWith("DOC#")) documents.push(clean(it));
   }
 
   // Newest first for time-ordered feeds.
@@ -111,6 +113,7 @@ export async function GET(request: Request) {
   let visibleTasks = tasks;
   let visibleApprovals = approvals;
   let visibleAttachments = attachments;
+  let visibleDocuments = documents;
 
   // The caller's own ids (Cognito sub + their member record id, which may be an
   // invite id ≠ the sub). Used for both project visibility and notifications.
@@ -153,6 +156,17 @@ export async function GET(request: Request) {
     visibleAttachments = attachments.filter((a) =>
       visibleIds.has(String(a.projectId)),
     );
+    // A document reaches the client when its project is visible OR the caller is
+    // personally tied to it (uploader, reviewer, or a named viewer) — so a doc
+    // shared for review/viewing is never hidden from the very people it's for.
+    visibleDocuments = documents.filter(
+      (d) =>
+        visibleIds.has(String(d.projectId)) ||
+        myIds.includes(String(d.uploadedById)) ||
+        myIds.includes(String(d.reviewerId)) ||
+        (Array.isArray(d.viewerIds) &&
+          (d.viewerIds as unknown[]).some((x) => myIds.includes(String(x)))),
+    );
   }
 
   return Response.json({
@@ -167,5 +181,6 @@ export async function GET(request: Request) {
     notifications: myNotifications.sort(byCreatedDesc),
     approvals: visibleApprovals.sort(byCreatedDesc),
     attachments: visibleAttachments.sort(byCreatedDesc),
+    documents: visibleDocuments.sort(byCreatedDesc),
   });
 }

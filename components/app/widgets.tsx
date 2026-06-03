@@ -210,11 +210,21 @@ export function ProgressBar({
   value: number;
   color?: string;
 }) {
+  // Clamp to 0–100 and guard against NaN so a bad input can't render an
+  // overflowing or empty bar. The width transitions so live changes (e.g. a
+  // task moving to Done) visibly animate rather than snapping.
+  const pct = Math.max(0, Math.min(100, Number.isFinite(value) ? value : 0));
   return (
-    <div className="h-1.5 w-full overflow-hidden rounded-full bg-secondary">
+    <div
+      className="h-1.5 w-full overflow-hidden rounded-full bg-secondary"
+      role="progressbar"
+      aria-valuenow={Math.round(pct)}
+      aria-valuemin={0}
+      aria-valuemax={100}
+    >
       <div
-        className="h-full rounded-full"
-        style={{ width: `${value}%`, background: color }}
+        className="h-full rounded-full transition-[width] duration-500 ease-out"
+        style={{ width: `${pct}%`, background: color }}
       />
     </div>
   );

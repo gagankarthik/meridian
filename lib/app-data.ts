@@ -397,6 +397,45 @@ export type Attachment = {
 
 export const ATTACHMENTS: Attachment[] = [];
 
+/* ---- Documentation (upload → review → digital sign-off) ----
+   A document is uploaded against a project with ONE reviewer (who approves with
+   a typed digital sign-off, or requests changes with a reason) and any number of
+   read-only viewers. Maps onto S3 (the file) + a DOC# DynamoDB item, mirroring
+   how attachments are stored. Named `DocFile` to avoid clashing with the DOM
+   `Document` global. */
+export type DocStatus = "pending" | "approved" | "rejected";
+export type DocFile = {
+  id: string;
+  /** Human title for the document (defaults to the file name on upload). */
+  title: string;
+  /** Original file name, extension, and human-readable size. */
+  name: string;
+  ext: string;
+  size: string;
+  projectId: string;
+  uploadedById: string;
+  /** The single member who must review & sign off (or request changes). */
+  reviewerId: string;
+  /** Members granted read-only visibility of this document. */
+  viewerIds: string[];
+  status: DocStatus;
+  /** Upload date (yyyy-mm-dd) + a sortable timestamp. */
+  date: string;
+  createdAt?: number;
+  /** S3 object key for download/preview (under the workspace prefix). */
+  objectKey?: string;
+  /** Optional context entered at upload time. */
+  description?: string;
+  /** Review decision: who decided, when, the typed sign-off signature (on
+      approval) and the reason given (when changes were requested). */
+  reviewedById?: string;
+  reviewedAt?: number;
+  signature?: string;
+  rejectReason?: string;
+};
+
+export const DOCUMENTS: DocFile[] = [];
+
 /* Resolve the active project id from a route searchParam. Runs on the server
    (which can't see live runtime data), so we trust a provided id and let the
    client fall back to its first project when the id isn't found. */

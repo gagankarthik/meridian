@@ -129,7 +129,7 @@ export function ProjectViewHeader({
 
       {/* tabs + right-aligned project search / filter */}
       <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 px-2 sm:px-4">
-        <div className="no-scrollbar -mb-px flex min-w-0 flex-1 items-center gap-0.5 overflow-x-auto">
+        <div className="no-scrollbar -mb-px flex min-w-0 flex-1 items-center gap-0.5 overflow-x-auto overflow-y-hidden">
           {TABS.map((t) => {
             const active = t.id === current;
             return (

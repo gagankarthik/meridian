@@ -13,6 +13,7 @@ import {
   APPROVALS,
   ATTACHMENTS,
   COLUMNS,
+  DOCUMENTS,
   MEMBERS,
   ME_ID,
   NOTIFICATIONS,
@@ -23,6 +24,7 @@ import {
   type Approval,
   type Attachment,
   type Comment,
+  type DocFile,
   type Member,
   type Notification,
   type Priority,
@@ -111,6 +113,28 @@ type WorkspaceCtx = {
   notifications: Notification[];
   approvals: Approval[];
   attachments: Attachment[];
+  documents: DocFile[];
+  /** Upload a document for review: S3 (presigned PUT) then record as a DOC item
+      with a reviewer + viewers. Optimistic in demo mode (no S3). */
+  uploadDocument: (input: {
+    file: File;
+    title: string;
+    projectId: string;
+    reviewerId: string;
+    viewerIds: string[];
+    description?: string;
+  }) => Promise<void>;
+  /** Record a reviewer's decision: approve with a typed digital sign-off, or
+      request changes with a reason. */
+  reviewDocument: (
+    id: string,
+    decision: "approved" | "rejected",
+    opts?: { signature?: string; reason?: string },
+  ) => void;
+  /** Re-open a rejected document for review (uploader, after making changes). */
+  resubmitDocument: (id: string) => void;
+  /** Remove a document everywhere + its S3 object / DDB record. */
+  removeDocument: (id: string) => void;
   setApprovalStatus: (id: string, status: Approval["status"]) => void;
   markNotificationRead: (id: string) => void;
   markAllNotificationsRead: () => void;
@@ -210,6 +234,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
   const [notifications, setNotifications] = useState<Notification[]>(NOTIFICATIONS);
   const [approvals, setApprovals] = useState<Approval[]>(APPROVALS);
   const [attachments, setAttachments] = useState<Attachment[]>(ATTACHMENTS);
+  const [documents, setDocuments] = useState<DocFile[]>(DOCUMENTS);
   const [columns, setColumns] = useState<Column[]>(
     COLUMNS.map((c) => ({ id: c.id, name: c.name })),
   );
@@ -299,6 +324,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
         setNotifications(data.notifications ?? []);
         setApprovals(data.approvals ?? []);
         setAttachments(data.attachments ?? []);
+        setDocuments(data.documents ?? []);
         if (liveColumns.length) setColumns(liveColumns);
         if (data.workspace) {
           setWorkspace({
@@ -491,6 +517,114 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
     notifications,
     approvals,
     attachments,
+    documents,
+    uploadDocument: async (input) => {
+      const today = new Date().toISOString().slice(0, 10);
+      const ext = (input.file.name.split(".").pop() ?? "").toLowerCase();
+      const base: Omit<DocFile, "id"> = {
+        title: input.title.trim() || input.file.name,
+        name: input.file.name,
+        ext,
+        size: humanSize(input.file.size),
+        projectId: input.projectId,
+        uploadedById: myMemberId(),
+        reviewerId: input.reviewerId,
+        viewerIds: input.viewerIds,
+        status: "pending",
+        date: today,
+        createdAt: Date.now(),
+        ...(input.description ? { description: input.description } : {}),
+      };
+      // Demo mode (no S3/live): keep an optimistic local record so the flow is
+      // fully usable locally — only download/preview needs the live backend.
+      if (!live) {
+        setDocuments((d) => [{ id: nextId("doc"), ...base }, ...d]);
+        return;
+      }
+      try {
+        const presign = await authedFetch("/api/documents", {
+          method: "POST",
+          body: JSON.stringify({
+            filename: input.file.name,
+            contentType: input.file.type,
+          }),
+        });
+        if (!presign.ok) return;
+        const { uploadUrl, key: objectKey } = await presign.json();
+        await fetch(uploadUrl, {
+          method: "PUT",
+          headers: {
+            "Content-Type": input.file.type || "application/octet-stream",
+          },
+          body: input.file,
+        });
+        const rec = await authedFetch("/api/documents", {
+          method: "PUT",
+          body: JSON.stringify({
+            key: objectKey,
+            name: input.file.name,
+            title: base.title,
+            ext,
+            size: base.size,
+            projectId: input.projectId,
+            reviewerId: input.reviewerId,
+            viewerIds: input.viewerIds,
+            description: input.description,
+          }),
+        });
+        if (rec.ok) {
+          const { document } = await rec.json();
+          setDocuments((d) => [document, ...d]);
+        }
+      } catch {
+        /* best-effort — skip a file that fails to upload */
+      }
+    },
+    reviewDocument: (id, decision, opts) => {
+      const patch: Partial<DocFile> =
+        decision === "approved"
+          ? {
+              status: "approved",
+              reviewedById: myMemberId(),
+              reviewedAt: Date.now(),
+              signature: opts?.signature ?? "",
+              rejectReason: "",
+            }
+          : {
+              status: "rejected",
+              reviewedById: myMemberId(),
+              reviewedAt: Date.now(),
+              rejectReason: opts?.reason ?? "",
+              signature: "",
+            };
+      setDocuments((d) => d.map((x) => (x.id === id ? { ...x, ...patch } : x)));
+      persist(`/api/documents/${id}`, {
+        method: "PATCH",
+        body: JSON.stringify(
+          decision === "approved"
+            ? { status: "approved", signature: opts?.signature }
+            : { status: "rejected", reason: opts?.reason },
+        ),
+      });
+    },
+    resubmitDocument: (id) => {
+      const patch: Partial<DocFile> = {
+        status: "pending",
+        reviewedById: undefined,
+        reviewedAt: undefined,
+        signature: "",
+        rejectReason: "",
+      };
+      setDocuments((d) => d.map((x) => (x.id === id ? { ...x, ...patch } : x)));
+      persist(`/api/documents/${id}`, {
+        method: "PATCH",
+        body: JSON.stringify({ status: "pending" }),
+      });
+    },
+    removeDocument: (id) => {
+      setDocuments((d) => d.filter((x) => x.id !== id));
+      persist(`/api/documents/${id}`, { method: "DELETE" });
+    },
     setApprovalStatus: (id, status) => {
       setApprovals((list) =>
         list.map((a) => (a.id === id ? { ...a, status } : a)),
@@ -652,6 +786,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
       setTasks((ts) => ts.filter((t) => t.projectId !== id));
       setApprovals((a) => a.filter((x) => x.projectId !== id));
       setAttachments((a) => a.filter((x) => x.projectId !== id));
+      setDocuments((d) => d.filter((x) => x.projectId !== id));
       persist(`/api/projects/${id}`, { method: "DELETE" });
     },
     columns,

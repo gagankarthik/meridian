@@ -17,7 +17,6 @@ import {
 import {
   memberById,
   projectById,
-  projectMemberIds,
   projectRole,
   type Member,
   type ProjectRole,
@@ -84,7 +83,21 @@ export function ProjectTeamClient({ projectId }: { projectId: string }) {
     ws.projects.find((p) => p.id === projectId) ?? projectById(projectId);
 
   const rows = useMemo(() => {
-    return projectMemberIds(projectId)
+    const p = ws.projects.find((x) => x.id === projectId) ?? projectById(projectId);
+    if (!p) return [];
+    // The project's REAL team: owner ∪ admins ∪ members ∪ viewers ∪ anyone whose
+    // personal access list includes this project. Task assignees are deliberately
+    // NOT counted as team members here — otherwise "Remove from project" would
+    // appear not to work while the person still has a task assigned (they'd keep
+    // re-appearing). Removal stays project-scoped; the workspace member is never
+    // deleted (that's the Team page).
+    const ids = new Set<string>(
+      [p.ownerId, ...p.adminIds, ...p.memberIds, ...p.viewerIds].filter(Boolean),
+    );
+    for (const m of ws.members) {
+      if (m.projects?.includes(projectId)) ids.add(m.id);
+    }
+    return Array.from(ids)
       .map((id) => memberById(id))
       .filter((m): m is NonNullable<typeof m> => Boolean(m))
       .map((m) => ({
@@ -94,10 +107,10 @@ export function ProjectTeamClient({ projectId }: { projectId: string }) {
           (t) => t.projectId === projectId && t.assigneeIds.includes(m.id),
         ).length,
       }));
-    // `projectMemberIds`/`projectRole`/`memberById` read the runtime store that
-    // mirrors ws.projects + ws.members, so recompute when those change too —
-    // otherwise a project-role change or "remove from project" wouldn't reflect
-    // until an unrelated tasks update happened to retrigger this memo.
+    // `projectRole`/`memberById` read the runtime store that mirrors
+    // ws.projects + ws.members, so recompute when those change too — otherwise a
+    // project-role change or "remove from project" wouldn't reflect until an
+    // unrelated tasks update happened to retrigger this memo.
   }, [projectId, ws.tasks, ws.projects, ws.members]);
 
   const allRows = useMemo(

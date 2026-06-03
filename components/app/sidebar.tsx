@@ -6,6 +6,7 @@ import { useEffect, useState } from "react";
 import {
   BarChart3,
   ChevronRight,
+  FileText,
   LayoutGrid,
   ListChecks,
   Map,
@@ -25,6 +26,7 @@ const MENU = [
   { label: "Dashboard", href: "/app", icon: LayoutGrid },
   { label: "Roadmap", href: "/app/roadmap", icon: Map },
   { label: "My Tasks", href: "/app/my-tasks", icon: ListChecks },
+  { label: "Documentation", href: "/app/documentation", icon: FileText },
   { label: "Reports", href: "/app/reports", icon: BarChart3 },
   { label: "Team", href: "/app/team", icon: Users },
 ];

@@ -61,13 +61,13 @@ const MENUS: Menu[] = [
   {
     label: "Product",
     cols: 2,
-    cta: { label: "See everything in the platform", href: "/#platform" },
+    cta: { label: "See everything in the platform", href: "/#features" },
     items: [
       { icon: Columns3, label: "Boards", desc: "Kanban for every team", href: "/#views", tint: "signal" },
       { icon: GanttChartSquare, label: "Timelines", desc: "Plan across quarters", href: "/#views", tint: "grape" },
       { icon: PieChart, label: "Dashboards", desc: "Real-time reporting", href: "/#views", tint: "teal" },
       { icon: Workflow, label: "Workflow", desc: "Intake to outcome", href: "/#workflow", tint: "green" },
-      { icon: Blocks, label: "Capabilities", desc: "Everything the work needs", href: "/#platform", tint: "yellow" },
+      { icon: Blocks, label: "Capabilities", desc: "Everything the work needs", href: "/#features", tint: "yellow" },
       { icon: Sparkles, label: "Roadmap", desc: "Plan across quarters", href: "/#workflow", tint: "signal" },
     ],
   },
