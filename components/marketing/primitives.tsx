@@ -1,13 +1,53 @@
 "use client";
 
-import { motion, useInView, useReducedMotion } from "motion/react";
-import { useRef, type ReactNode } from "react";
+import { motion, useReducedMotion } from "motion/react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { cn } from "@/lib/utils";
 
 const EASE = [0.16, 1, 0.3, 1] as const;
 
-/* Editorial reveal — fade + lift, triggered once on scroll. Honors
-   prefers-reduced-motion (renders in place, never stuck hidden). */
+/**
+ * Reveal-on-scroll WITHOUT ever shipping hidden content in the SSR HTML.
+ *
+ * Content renders **visible by default** (`shown` starts true), so the page
+ * paints immediately and is never blank while the JS bundle loads — the old
+ * `initial={{opacity:0}}` baseline made the whole landing page look like it was
+ * "loading as you scroll" on slow mobile. After mount we only hide + animate
+ * elements that are still BELOW the fold (off-screen, so the transition is
+ * never visible); anything already on screen, reduced-motion users, and the
+ * no-JS case all stay fully visible.
+ */
+function useReveal() {
+  const ref = useRef(null);
+  const reduce = useReducedMotion();
+  const [shown, setShown] = useState(true);
+
+  useEffect(() => {
+    if (reduce || typeof IntersectionObserver === "undefined") return;
+    const el = ref.current as HTMLElement | null;
+    if (!el) return;
+    // Already on (or near) screen at mount → leave it shown, no flash.
+    if (el.getBoundingClientRect().top < window.innerHeight * 0.9) return;
+
+    setShown(false);
+    const obs = new IntersectionObserver(
+      ([entry]) => {
+        if (entry.isIntersecting) {
+          setShown(true);
+          obs.disconnect();
+        }
+      },
+      { rootMargin: "0px 0px -10% 0px" },
+    );
+    obs.observe(el);
+    return () => obs.disconnect();
+  }, [reduce]);
+
+  return { ref, shown };
+}
+
+/* Editorial reveal — fade + lift as it scrolls into view, but never hidden in
+   SSR so content always paints. */
 export function Reveal({
   children,
   className,
@@ -21,15 +61,13 @@ export function Reveal({
   y?: number;
   as?: "div" | "span" | "li" | "h2" | "p";
 }) {
-  const ref = useRef(null);
-  const inView = useInView(ref, { once: true, margin: "-12% 0px -12% 0px" });
-  const reduce = useReducedMotion();
+  const { ref, shown } = useReveal();
   const MotionTag = motion[as];
   return (
     <MotionTag
       ref={ref}
-      initial={reduce ? false : { opacity: 0, y }}
-      animate={reduce ? undefined : inView ? { opacity: 1, y: 0 } : undefined}
+      initial={false}
+      animate={shown ? { opacity: 1, y: 0 } : { opacity: 0, y }}
       transition={{ duration: 0.7, delay, ease: EASE }}
       className={className}
     >
@@ -39,7 +77,7 @@ export function Reveal({
 }
 
 /* Stagger container — children (use <RevealItem>) cascade in as the group
-   scrolls into view. Gives sections a consistent, flowing entrance. */
+   scrolls into view. Same SSR-visible guarantee as Reveal. */
 export function Stagger({
   children,
   className,
@@ -51,14 +89,14 @@ export function Stagger({
   stagger?: number;
   as?: "div" | "ul";
 }) {
-  const reduce = useReducedMotion();
+  const { ref, shown } = useReveal();
   const MotionTag = motion[as];
   return (
     <MotionTag
+      ref={ref}
       className={className}
-      initial={reduce ? false : "hidden"}
-      whileInView={reduce ? undefined : "show"}
-      viewport={{ once: true, margin: "-12% 0px -12% 0px" }}
+      initial={false}
+      animate={shown ? "show" : "hidden"}
       transition={{ staggerChildren: stagger }}
     >
       {children}

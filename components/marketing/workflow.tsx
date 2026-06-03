@@ -269,7 +269,9 @@ export function WorkflowSection() {
               aria-labelledby={`wf-tab-${active}`}
               className="rounded-2xl border border-line bg-card p-3 shadow-float ring-1 ring-black/[0.03]"
             >
-              <AnimatePresence mode="wait">
+              {/* initial={false}: the first panel paints visible immediately
+                  (no opacity:0 on load); only tab switches animate. */}
+              <AnimatePresence mode="wait" initial={false}>
                 <motion.div
                   key={active}
                   initial={reduce ? false : { opacity: 0, y: 10 }}

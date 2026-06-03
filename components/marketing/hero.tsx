@@ -12,9 +12,12 @@ const stagger = {
   hidden: {},
   show: { transition: { staggerChildren: 0.08, delayChildren: 0.05 } },
 };
+// Transform-only entrance: the hero text/CTAs are ALWAYS visible in the SSR HTML
+// (no opacity:0 baseline), so on slow mobile the page paints immediately instead
+// of waiting on the motion bundle to hydrate. It just lifts into place.
 const item = {
-  hidden: { opacity: 0, y: 22 },
-  show: { opacity: 1, y: 0, transition: { duration: 0.7, ease } },
+  hidden: { y: 22 },
+  show: { y: 0, transition: { duration: 0.7, ease } },
 };
 
 /* chip positions around the orbit rings (desktop only) */
@@ -85,8 +88,8 @@ function OrbitRings() {
 function ActivityCard() {
   return (
     <motion.div
-      initial={{ opacity: 0, y: 28 }}
-      animate={{ opacity: 1, y: 0 }}
+      initial={{ y: 28 }}
+      animate={{ y: 0 }}
       transition={{ duration: 0.8, ease, delay: 0.5 }}
       className="relative mx-auto mt-12 w-full max-w-md"
     >
